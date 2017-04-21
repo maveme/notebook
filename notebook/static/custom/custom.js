@@ -80,3 +80,51 @@
  * @class customjs
  * @static
  */
+
+define([
+    'base/js/namespace',
+    'base/js/events',
+], function(Jupyter, events) {
+    console.log(events);
+
+    Jupyter.toolbar.add_buttons_group([{
+        'label': 'Rascal',
+        'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+        'callback': function() {
+            console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+            Jupyter.notebook.set_codemirror_mode("rascal");
+            console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+            // Jupyter.notebook.kernel.execute('%qtconsole');
+        }
+    },
+      {
+        'label': 'Amalga',
+        'icon': 'fa-thumbs-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+        'callback': function() {
+          console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+          Jupyter.notebook.set_codemirror_mode("amalga");
+        }
+      }
+
+    ], 'Custom');
+
+
+    Jupyter.toolbar.add_selector_group({
+      'label': 'Rascal',
+      'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+      'options': [
+          'Rascal mirror', // {name: 'Rascal mirror' value: 'rascal'}
+          'Amalga mirror',
+          'Java',
+          'C'
+      ],
+      'callback': function() {
+        console.log("as");
+      }
+    });
+
+    //  events.on('app_initialized.NotebookApp', function() {
+    //      console.warn("entro aqui");
+    //  });
+
+});

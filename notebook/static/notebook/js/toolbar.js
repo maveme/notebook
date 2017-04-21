@@ -119,6 +119,7 @@ define(['jquery'], function($) {
         return btn_group;
     };
 
+
     ToolBar.prototype.style = function () {
         this.element.addClass('toolbar');
     };
@@ -130,6 +131,45 @@ define(['jquery'], function($) {
     ToolBar.prototype.toggle = function () {
         this.element.toggle();
     };
+
+  ToolBar.prototype.add_selector_group = function (dropdown_options) {
+    var that = this;
+    var drop_down = $('<select/>').addClass("form-control select-xs");
+    // if( group_id !== undefined ) {
+    //   drop_down.attr('id',group_id);
+    // }
+    var i =0;
+      (function(i, dropdown_options) {
+        console.warn("i: " + i + ", list: " + dropdown_options);
+
+        //     var el = list[i];
+        //     var action_name;
+        //     var action;
+        //     if(typeof(el) === 'string'){
+        //       action = that.actions.get(el);
+        //       action_name = el;
+        //
+        //     }
+        //     var option  = $('<option/>')
+        //     .attr("value", el.label||action.help)
+        //     .append(
+        //         $("<i/>").addClass(el.icon||(action||{icon:'fa-exclamation-triangle'}).icon).addClass('fa')
+        //     );
+        //     var id = el.id;
+        //     if( id !== undefined ){
+        //       option.attr('id',id);
+        //     }
+        //     option.attr('data-jupyter-action', action_name);
+        //     var fun = el.callback|| function(){
+        //           that.actions.call(action_name);
+        //         };
+        //     option.click(fun);
+        //     drop_down.append(option);
+          })(i,dropdown_options);
+          // END IIFE
+        $(this.selector).append(drop_down);
+    return drop_down;
+  };
 
     return {'ToolBar': ToolBar};
 });
