@@ -42,7 +42,8 @@ require([
     'codemirror/lib/codemirror',
     'notebook/js/about',
     'notebook/js/searchandreplace',
-    'notebook/js/clipboard'
+    'notebook/js/clipboard',
+    'components/mixpanel/build/mixpanel.amd'
 ], function(
     $,
     contents_service,
@@ -65,9 +66,17 @@ require([
     CodeMirror,
     about,
     searchandreplace,
-    clipboard
+    clipboard,
+    mixpanel
     ) {
     "use strict";
+
+    mixpanel.init("TOKEN", {
+      debug: true,
+      loaded: function() {
+        mixpanel.track('lwwwwwoaded() callback works but is unnecessary');
+      }
+    });
 
     // Pull typeahead from the global jquery object
     var typeahead = $.typeahead;
