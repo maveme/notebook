@@ -74,7 +74,7 @@ require([
     mixpanel.init("TOKEN", {
       debug: true,
       loaded: function() {
-        mixpanel.track('lwwwwwoaded() callback works but is unnecessary');
+        mixpanel.track('Mixpanel was loaded from the notebook (file: main.js)');
       }
     });
 
