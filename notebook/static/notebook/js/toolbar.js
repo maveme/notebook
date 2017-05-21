@@ -117,6 +117,25 @@ define(['jquery'], function($) {
         return btn_group;
     };
 
+  ToolBar.prototype.add_selector_group = function (dropdown_options) {
+    var that = this;
+    var drop_down = $('<select/>').addClass("form-control select-xs").attr('id', 'codemirror-mode');
+    dropdown_options.options.forEach(function(el){
+        drop_down.append($("<option/>").attr("value", el).text(el));
+    });
+    function callFunction(name){
+      dropdown_options.callback(name.toLowerCase());
+    };
+
+    drop_down.change(function() {
+      $('#codemirror-mode option:selected').each(function() {
+        callFunction(this.value);
+      });
+    });
+    $(this.selector).append(drop_down);
+    return drop_down;
+  };
+
     ToolBar.prototype.style = function () {
         this.element.addClass('toolbar');
     };

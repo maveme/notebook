@@ -107,13 +107,13 @@ define([
     'label': 'Rascal',
     'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
     'options': [
-      'Rascal mirror', // {name: 'Rascal mirror' value: 'rascal'}
-      'Amalga mirror',
+      'Rascal', // {name: 'Rascal mirror' value: 'rascal'}
+      'Amalga',
       'Java',
       'C'
     ],
-    'callback': function() {
-      console.log("as");
+    'callback': function(mode) {
+      Jupyter.notebook.set_codemirror_mode(mode);
     }
   });
 
