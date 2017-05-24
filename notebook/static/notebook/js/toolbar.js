@@ -119,6 +119,10 @@ define(['jquery'], function($) {
 
   ToolBar.prototype.add_selector_group = function (dropdown_options) {
     var that = this;
+    var label = $('<div/>').addClass("btn-group");
+    label.append($('<p/>').text(dropdown_options.label));
+    $(this.selector).append(label);
+
     var drop_down = $('<select/>').addClass("form-control select-xs").attr('id', 'codemirror-mode');
     dropdown_options.options.forEach(function(el){
         drop_down.append($("<option/>").attr("value", el).text(el));

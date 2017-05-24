@@ -21,7 +21,8 @@ define([
     'notebook/js/celltoolbar',
     'codemirror/lib/codemirror',
     'codemirror/mode/python/python',
-    'notebook/js/codemirror-ipython'
+    'notebook/js/codemirror-ipython',
+    'components/mixpanel/build/mixpanel.amd'
 ], function(
     $,
     IPython,
@@ -34,7 +35,8 @@ define([
     celltoolbar,
     CodeMirror,
     cmpython,
-    cmip
+    cmip,
+    mixpanel
     ) {
     "use strict";
     
@@ -268,6 +270,7 @@ define([
                 event.preventDefault();
                 return true;
         } else if (event.keyCode === keycodes.tab && event.type === 'keydown') {
+          mixpanel.track('Code completion');
             // Tab completion.
             this.tooltip.remove_and_cancel_tooltip();
 
@@ -304,6 +307,7 @@ define([
      * @method execute
      */
     CodeCell.prototype.execute = function (stop_on_error) {
+        mixpanel.track('Execute code');
         if (!this.kernel) {
             console.log("Can't execute cell since kernel is not set.");
             return;

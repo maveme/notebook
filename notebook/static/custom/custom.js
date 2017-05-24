@@ -77,34 +77,32 @@ define([
   'components/mixpanel/build/mixpanel.amd'
 ], function(Jupyter, events, mixpanel) {
 
-
-
-  Jupyter.toolbar.add_buttons_group([{
-    'label': 'Rascal',
-    'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
-    'callback': function() {
-      console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
-      Jupyter.notebook.set_codemirror_mode("rascal");
-      console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
-      // Jupyter.notebook.kernel.execute('%qtconsole');
-
-      mixpanel.track('Code mirror mode changed to: Rascal');
-    }
-  },
-    {
-      'label': 'Amalga',
-      'icon': 'fa-thumbs-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
-      'callback': function() {
-        console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
-        Jupyter.notebook.set_codemirror_mode("amalga");
-        mixpanel.track('Code mirror mode changed to: Amalga');
-      }
-    }
-  ], 'Custom');
+  // Jupyter.toolbar.add_buttons_group([{
+  //   'label': 'Rascal',
+  //   'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+  //   'callback': function() {
+  //     console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+  //     Jupyter.notebook.set_codemirror_mode("rascal");
+  //     console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+  //     // Jupyter.notebook.kernel.execute('%qtconsole');
+  //
+  //     mixpanel.track('Code mirror mode changed to: Rascal');
+  //   }
+  // },
+  //   {
+  //     'label': 'Amalga',
+  //     'icon': 'fa-thumbs-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+  //     'callback': function() {
+  //       console.log('code mirror: '+ Jupyter.notebook.codemirror_mode);
+  //       Jupyter.notebook.set_codemirror_mode("amalga");
+  //       mixpanel.track('Code mirror mode changed to: Amalga');
+  //     }
+  //   }
+  // ], 'Custom');
 
 
   Jupyter.toolbar.add_selector_group({
-    'label': 'Rascal',
+    'label': 'Code mirror: ',
     'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
     'options': [
       'Rascal', // {name: 'Rascal mirror' value: 'rascal'}
@@ -114,6 +112,7 @@ define([
     ],
     'callback': function(mode) {
       Jupyter.notebook.set_codemirror_mode(mode);
+      mixpanel.track('Code mirror mode changed to:' + mode);
     }
   });
 
