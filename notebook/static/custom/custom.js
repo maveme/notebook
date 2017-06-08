@@ -77,6 +77,16 @@ define([
   'components/mixpanel/build/mixpanel.amd'
 ], function(Jupyter, events, mixpanel) {
 
+  Jupyter.toolbar.add_buttons_group([{
+      'label': 'Search',
+      'icon': 'fa-search', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+      'callback': function() {
+        Jupyter.toolbar.search_ras();
+      }
+    }],'custom');
+
+
+
   // Jupyter.toolbar.add_buttons_group([{
   //   'label': 'Rascal',
   //   'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons

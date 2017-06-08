@@ -1,7 +1,7 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-define(['jquery'], function($) {
+define(['jquery', 'base/js/dialog','base/js/namespace'], function($, dialog, Jupyter) {
     "use strict";
 
     /**
@@ -138,6 +138,23 @@ define(['jquery'], function($) {
     });
     $(this.selector).append(drop_down);
     return drop_down;
+  };
+
+  ToolBar.prototype.search_ras = function () {
+
+    console.log('entro');
+    console.log(IPython.notebook.session.kernel.send_shell_message("search_request", "ola", {},{}));
+    dialog.modal({
+      title: 'About Jupyter Notebook',
+      body: "<h1>hola</h1>",
+      buttons: { 'OK': {} }
+    });
+
+    // var div = $('<div/>').addClass("modal-dialog");
+    // div.append($('<div/> ').addClass('modal-content'));
+    // div.append($('<h4/>').addClass('modal-title').text("holaaaaa"));
+    // $(this.selector).append(div);
+    // return div;
   };
 
     ToolBar.prototype.style = function () {

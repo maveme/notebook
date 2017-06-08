@@ -71,7 +71,7 @@ require([
     ) {
     "use strict";
 
-    mixpanel.init("TOKEN", {
+    mixpanel.init("1366070925b7e5a28486ab8764aa49b7", {
       debug: true,
       loaded: function() {
         mixpanel.track('Notebook opened');
