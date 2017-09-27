@@ -111,20 +111,23 @@ define([
   // ], 'Custom');
 
 
-  Jupyter.toolbar.add_selector_group({
-    'label': 'Code mirror: ',
-    'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
-    'options': [
-      'Rascal', // {name: 'Rascal mirror' value: 'rascal'}
-      'Amalga',
-      'Java',
-      'C'
-    ],
-    'callback': function(mode) {
-      Jupyter.notebook.set_codemirror_mode(mode);
-      mixpanel.track('Code mirror mode changed to:' + mode);
-    }
-  });
+  // Jupyter.toolbar.add_selector_group({
+  //   'label': 'Code mirror: ',
+  //   'icon': 'fa-hand-o-up', // select your icon from http://fortawesome.github.io/Font-Awesome/icons
+  //   'options': [
+  //     'Rascal', // {name: 'Rascal mirror' value: 'rascal'}
+  //     'Amalga',
+  //     'Amalgatest',
+  //     'Java',
+  //     'C',
+  //     'Pico',
+  //     'Halide'
+  //   ],
+  //   'callback': function(mode) {
+  //     Jupyter.notebook.set_codemirror_mode(mode);
+  //     mixpanel.track('Code mirror mode changed to:' + mode);
+  //   }
+  // });
 
   //  events.on('app_initialized.NotebookApp', function() {
   //      console.warn("entro aqui");

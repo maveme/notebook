@@ -2142,6 +2142,7 @@ define([
      * Set the mode to 'null' (no highlighting) if it can't be found.
      */
     Notebook.prototype.set_codemirror_mode = function(newmode){
+        console.info("change code mirror function - notebook.js")
         // if mode is the same don't reset,
         // to avoid n-time re-highlighting.
         if (_mode_equal(newmode, this.codemirror_mode)) {
