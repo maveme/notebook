@@ -208,7 +208,7 @@ define([
          * http://www.ietf.org/rfc/rfc4122.txt
          */
         var s = [];
-        var hexDigits = "0123456789ABCDEF";
+        var hexDigits = "0123456789abcdef";
         for (var i = 0; i < 32; i++) {
             s[i] = hexDigits.substr(Math.floor(Math.random() * 0x10), 1);
         }
@@ -238,6 +238,59 @@ define([
         "ansi-white-intense",
     ];
     
+    function _pushColoredChunk(chunk, fg, bg, bold, underline, inverse, out) {
+        if (chunk) {
+            var classes = [];
+            var styles = [];
+
+            if (bold && typeof fg === "number" && 0 <= fg && fg < 8) {
+                fg += 8;  // Bold text uses "intense" colors
+            }
+            if (inverse) {
+                [fg, bg] = [bg, fg];
+            }
+
+            if (typeof fg === "number") {
+                classes.push(_ANSI_COLORS[fg] + "-fg");
+            } else if (fg.length) {
+                styles.push("color: rgb(" + fg + ")");
+            } else if (inverse) {
+                classes.push("ansi-default-inverse-fg");
+            }
+
+            if (typeof bg === "number") {
+                classes.push(_ANSI_COLORS[bg] + "-bg");
+            } else if (bg.length) {
+                styles.push("background-color: rgb(" + bg + ")");
+            } else if (inverse) {
+                classes.push("ansi-default-inverse-bg");
+            }
+
+            if (bold) {
+                classes.push("ansi-bold");
+            }
+
+            if (underline) {
+                classes.push("ansi-underline");
+            }
+
+            if (classes.length || styles.length) {
+                out.push("<span");
+                if (classes.length) {
+                    out.push(' class="' + classes.join(" ") + '"');
+                }
+                if (styles.length) {
+                    out.push(' style="' + styles.join("; ") + '"');
+                }
+                out.push(">");
+                out.push(chunk);
+                out.push("</span>");
+            } else {
+                out.push(chunk);
+            }
+        }
+    }
+
     function _getExtendedColors(numbers) {
         var r, g, b;
         var n = numbers.shift();
@@ -258,7 +311,7 @@ define([
                 // 16 default terminal colors
                 return idx;
             } else if (idx < 232) {
-                // 6x6x6 color cube, see http://stackoverflow.com/a/27165165/500098
+                // 6x6x6 color cube, see https://stackoverflow.com/a/27165165/500098
                 r = Math.floor((idx - 16) / 36);
                 r = r > 0 ? 55 + r * 40 : 0;
                 g = Math.floor(((idx - 16) % 36) / 6);
@@ -266,7 +319,7 @@ define([
                 b = (idx - 16) % 6;
                 b = b > 0 ? 55 + b * 40 : 0;
             } else if (idx < 256) {
-                // grayscale, see http://stackoverflow.com/a/27165165/500098
+                // grayscale, see https://stackoverflow.com/a/27165165/500098
                 r = g = b = (idx - 232) * 10 + 8;
             } else {
                 throw new RangeError("Color index must be < 256");
@@ -309,52 +362,7 @@ define([
                 // Ignored: Not a color code
             }
             var chunk = str.substring(start, match.index);
-            if (chunk) {
-                if (bold && typeof fg === "number" && 0 <= fg && fg < 8) {
-                    fg += 8;  // Bold text uses "intense" colors
-                }
-                var classes = [];
-                var styles = [];
-
-                if (typeof fg === "number") {
-                    classes.push(_ANSI_COLORS[fg] + "-fg");
-                } else if (fg.length) {
-                    styles.push("color: rgb(" + fg + ")");
-                }
-
-                if (typeof bg === "number") {
-                    classes.push(_ANSI_COLORS[bg] + "-bg");
-                } else if (bg.length) {
-                    styles.push("background-color: rgb(" + bg + ")");
-                }
-
-                if (bold) {
-                    classes.push("ansi-bold");
-                }
-
-                if (underline) {
-                    classes.push("ansi-underline");
-                }
-
-                if (inverse) {
-                    classes.push("ansi-inverse");
-                }
-
-                if (classes.length || styles.length) {
-                    out.push("<span");
-                    if (classes.length) {
-                        out.push(' class="' + classes.join(" ") + '"');
-                    }
-                    if (styles.length) {
-                        out.push(' style="' + styles.join("; ") + '"');
-                    }
-                    out.push(">");
-                    out.push(chunk);
-                    out.push("</span>");
-                } else {
-                    out.push(chunk);
-                }
-            }
+	    _pushColoredChunk(chunk, fg, bg, bold, underline, inverse, out);
             start = ansi_re.lastIndex;
 
             while (numbers.length) {
@@ -379,6 +387,12 @@ define([
                     case 21:
                     case 22:
                         bold = false;
+                        break;
+                    case 24:
+                        underline = false;
+                        break;
+                    case 27:
+                        inverse = false;
                         break;
                     case 30:
                     case 31:
@@ -489,7 +503,7 @@ define([
         return fixCarriageReturn(fixBackspace(txt));
     }
 
-    // Locate any URLs and convert them to a anchor tag
+    // Locate any URLs and convert them to an anchor tag
     function autoLinkUrls(txt) {
         return txt.replace(/(^|\s)(https?|ftp)(:[^'"<>\s]+)/gi,
             "$1<a target=\"_blank\" href=\"$2$3\">$2$3</a>");
@@ -511,7 +525,7 @@ define([
          * wrapper around contructor to avoid requiring `var a = new constructor()`
          * useful for passing constructors as callbacks,
          * not for programmer laziness.
-         * from http://programmers.stackexchange.com/questions/118798
+         * from https://programmers.stackexchange.com/questions/118798
          */
         return function () {
             var obj = Object.create(constructor.prototype);
@@ -630,7 +644,7 @@ define([
         return cm.posFromIndex(cursor_pos);
     };
     
-    // http://stackoverflow.com/questions/2400935/browser-detection-in-javascript
+    // https://stackoverflow.com/questions/2400935/browser-detection-in-javascript
     var browser = (function() {
         if (typeof navigator === 'undefined') {
             // navigator undefined in node
@@ -643,7 +657,7 @@ define([
         return M;
     })();
 
-    // http://stackoverflow.com/questions/11219582/how-to-detect-my-browser-version-and-operating-system-using-javascript
+    // https://stackoverflow.com/questions/11219582/how-to-detect-my-browser-version-and-operating-system-using-javascript
     var platform = (function () {
         if (typeof navigator === 'undefined') {
             // navigator undefined in node
@@ -659,7 +673,7 @@ define([
     
     var get_url_param = function (name) {
         // get a URL parameter. I cannot believe we actually need this.
-        // Based on http://stackoverflow.com/a/25359264/938949
+        // Based on https://stackoverflow.com/a/25359264/938949
         var match = new RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
         if (match){
             return decodeURIComponent(match[1] || '');

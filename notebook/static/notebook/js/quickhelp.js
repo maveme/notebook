@@ -80,7 +80,7 @@ define([
     var mac_humanize_map = {
         // all these are unicode, will probably display badly on anything except macs.
         // these are the standard symbol that are used in MacOS native menus
-        // cf http://apple.stackexchange.com/questions/55727/
+        // cf https://apple.stackexchange.com/questions/55727/
         // for htmlentities and/or unicode value
         'cmd':'⌘',
         'shift':'⇧',
@@ -286,8 +286,11 @@ define([
                 // close this dialog
                 $(that.shortcut_dialog).modal("toggle");
                 // and open the next one
-                that.keyboard_manager.actions.call(
-                    'jupyter-notebook:edit-command-mode-keyboard-shortcuts');
+                $(that.shortcut_dialog).on('hidden.bs.modal', function (e) {
+                    that.keyboard_manager.actions.call(
+                        'jupyter-notebook:edit-command-mode-keyboard-shortcuts'
+                    );
+                });
             });
         div.find('h4').append(edit_button);
         return div;

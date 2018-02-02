@@ -14,6 +14,7 @@ import warnings
 import mimetypes
 import nbformat
 
+from send2trash import send2trash
 from tornado import web
 
 from .filecheckpoints import FileCheckpoints
@@ -77,9 +78,10 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
             return getcwd()
 
     save_script = Bool(False, config=True, help='DEPRECATED, use post_save_hook. Will be removed in Notebook 5.0')
-
     @observe('save_script')
-    def _update_save_script(self):
+    def _update_save_script(self, change):
+        if not change['new']:
+            return
         self.log.warning("""
         `--script` is deprecated and will be removed in notebook 5.0.
 
@@ -149,9 +151,18 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
     def _checkpoints_class_default(self):
         return FileCheckpoints
 
+    delete_to_trash = Bool(True, config=True,
+        help="""If True (default), deleting files will send them to the
+        platform's trash/recycle bin, where they can be recovered. If False,
+        deleting files really deletes them.""")
+
     @default('files_handler_class')
     def _files_handler_class_default(self):
         return AuthenticatedFileHandler
+
+    @default('files_handler_params')
+    def _files_handler_params_default(self):
+        return {'path': self.root_dir}
 
     def is_hidden(self, path):
         """Does the API style path correspond to a hidden directory or file?
@@ -276,7 +287,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
 
         if not os.path.isdir(os_path):
             raise web.HTTPError(404, four_o_four)
-        elif is_hidden(os_path, self.root_dir):
+        elif is_hidden(os_path, self.root_dir) and not self.allow_hidden:
             self.log.info("Refusing to serve hidden directory %r, via 404 Error",
                 os_path
             )
@@ -414,7 +425,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
 
     def _save_directory(self, os_path, model, path=''):
         """create a directory"""
-        if is_hidden(os_path, self.root_dir):
+        if is_hidden(os_path, self.root_dir) and not self.allow_hidden:
             raise web.HTTPError(400, u'Cannot create hidden directory %r' % os_path)
         if not os.path.exists(os_path):
             with self.perm_to_403():
@@ -477,19 +488,26 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
         path = path.strip('/')
         os_path = self._get_os_path(path)
         rm = os.unlink
+        if not os.path.exists(os_path):
+            raise web.HTTPError(404, u'File or directory does not exist: %s' % os_path)
+
+        if self.delete_to_trash:
+            self.log.debug("Sending %s to trash", os_path)
+            # Looking at the code in send2trash, I don't think the errors it
+            # raises let us distinguish permission errors from other errors in
+            # code. So for now, just let them all get logged as server errors.
+            send2trash(os_path)
+            return
+
         if os.path.isdir(os_path):
             listing = os.listdir(os_path)
-            # Don't delete non-empty directories.
+            # Don't permanently delete non-empty directories.
             # A directory containing only leftover checkpoints is
             # considered empty.
             cp_dir = getattr(self.checkpoints, 'checkpoint_dir', None)
             for entry in listing:
                 if entry != cp_dir:
                     raise web.HTTPError(400, u'Directory %s not empty' % os_path)
-        elif not os.path.isfile(os_path):
-            raise web.HTTPError(404, u'File does not exist: %s' % os_path)
-
-        if os.path.isdir(os_path):
             self.log.debug("Removing directory %s", os_path)
             with self.perm_to_403():
                 shutil.rmtree(os_path)

@@ -25,7 +25,11 @@ define([
     };
 
     var item_in = function(item, list) {
-      return list.indexOf(item) != -1;
+      // Normalize list and item to lowercase
+      var normalized_list = list.map(function(_item) {
+        return _item.toLowerCase();
+      });
+      return normalized_list.indexOf(item.toLowerCase()) != -1;
     };
 
     var includes_extension = function(filepath, extensionslist) {
@@ -165,6 +169,7 @@ define([
                     console.warn('Error during New file creation', e);
                 });
                 that.load_sessions();
+                e.preventDefault();
             });
             $('#new-folder').click(function(e) {
                 that.contents.new_untitled(that.notebook_path || '', {type: 'directory'})
@@ -185,6 +190,7 @@ define([
                     console.warn('Error during New directory creation', e);
                 });
                 that.load_sessions();
+                e.preventDefault();
             });
 
             // Bind events for action buttons.
@@ -350,12 +356,54 @@ define([
 
     NotebookList.prototype.load_list = function () {
         var that = this;
+        // Add an event handler browser back and forward events
+        window.onpopstate = function(e) {
+            var path = window.history.state ? window.history.state.path : '';
+            that.update_location(path);
+        };
+        var breadcrumb = $('.breadcrumb');
+        breadcrumb.empty();
+        var list_item = $('<li/>');
+        var root = $('<li/>').append('<a href="/tree"><i class="fa fa-folder"></i></a>').click(function(e) {
+            var path = '';
+            window.history.pushState({
+                path: path
+            }, 'Home', utils.url_path_join(that.base_url, 'tree'));
+            that.update_location(path);
+            return false;
+        });
+        breadcrumb.append(root);
+        var path_parts = [];
+        this.notebook_path.split('/').forEach(function(path_part) {
+            path_parts.push(path_part);
+            var path = path_parts.join('/');
+            var url = utils.url_path_join(
+                that.base_url,
+                '/tree',
+                utils.encode_uri_components(path)
+            );
+            var crumb = $('<li/>').append('<a href="' + url + '">' + path_part + '</a>').click(function(e) {
+                window.history.pushState({
+                    path: path
+                }, path, url);
+                that.update_location(path);
+                return false;
+            });
+            breadcrumb.append(crumb);
+        });
         this.contents.list_contents(that.notebook_path).then(
             $.proxy(this.draw_notebook_list, this),
             function(error) {
                 that.draw_notebook_list({content: []}, i18n.msg._("Server error: ") + error.message);
             }
         );
+    };
+    
+    NotebookList.prototype.update_location = function (path) {
+        this.notebook_path = path;
+        $('body').attr('data-notebook-path', path);
+        // Update the file tree list without reloading the page
+        this.load_list();
     };
 
     /**
@@ -536,30 +584,34 @@ define([
         this._selection_changed();
     };
 
-    NotebookList.ipynb_extensions = ['ipynb'];
-    // List of text file extensions from
-    // https://github.com/sindresorhus/text-extensions/blob/master/text-extensions.json
-    var editable_extensions = ['applescript', 'asp', 'aspx', 'atom', 'bashrc', 'bat', 'bbcolors', 'bib', 'bowerrc', 'c', 'cc', 'cfc', 'cfg', 'cfm', 'cmd', 'cnf', 'coffee', 'conf', 'cpp', 'cson', 'css', 'csslintrc', 'csv', 'curlrc', 'cxx', 'diff', 'eco', 'editorconfig', 'ejs', 'emacs', 'eml', 'erb', 'erl', 'eslintignore', 'eslintrc', 'gemrc', 'gitattributes', 'gitconfig', 'gitignore', 'go', 'gvimrc', 'h', 'haml', 'hbs', 'hgignore', 'hpp', 'htaccess', 'htm', 'html', 'iced', 'ini', 'ino', 'irbrc', 'itermcolors', 'jade', 'js', 'jscsrc', 'jshintignore', 'jshintrc', 'json', 'jsonld', 'jsx', 'less', 'log', 'ls', 'm', 'markdown', 'md', 'mdown', 'mdwn', 'mht', 'mhtml', 'mkd', 'mkdn', 'mkdown', 'nfo', 'npmignore', 'npmrc', 'nvmrc', 'patch', 'pbxproj', 'pch', 'php', 'phtml', 'pl', 'pm', 'properties', 'py', 'rb', 'rdoc', 'rdoc_options', 'ron', 'rss', 'rst', 'rtf', 'rvmrc', 'sass', 'scala', 'scss', 'seestyle', 'sh', 'sls', 'sql', 'sss', 'strings', 'styl', 'stylus', 'sub', 'sublime-build', 'sublime-commands', 'sublime-completions', 'sublime-keymap', 'sublime-macro', 'sublime-menu', 'sublime-project', 'sublime-settings', 'sublime-workspace', 'svg', 'terminal', 'tex', 'text', 'textile', 'tmLanguage', 'tmTheme', 'tsv', 'txt', 'vbs', 'vim', 'viminfo', 'vimrc', 'webapp', 'xht', 'xhtml', 'xml', 'xsl', 'yaml', 'yml', 'zsh', 'zshrc'];
-    NotebookList.editable_extensions = editable_extensions.concat(['ipynb', 'geojson', 'plotly', 'plotly.json', 'vg', 'vg.json', 'vl', 'vl.json']);
-    NotebookList.viewable_extensions = ['htm', 'html', 'xhtml', 'mht', 'mhtml'];
-
     NotebookList.prototype._is_notebook = function(model) {
-      return includes_extension(model.path, NotebookList.ipynb_extensions);
+      var ipynb_extensions = ['ipynb'];
+      return includes_extension(model.path, ipynb_extensions);
     };
     
     NotebookList.prototype._is_editable = function(model) {
-      // Editable: any text/ mimetype, specific mimetypes defined as editable,
-      // +json and +xml mimetypes, specific extensions listed as editable.
-      return model.mimetype &&
-          (model.mimetype.indexOf('text/') === 0
-           || item_in(model.mimetype, this.EDIT_MIMETYPES)
-           || json_or_xml_container_mimetype(model.mimetype))
-        || includes_extension(model.path, NotebookList.editable_extensions);
+      // Allow any file to be "edited"
+      // Non-text files will display the following error:
+      //   Error: [FILE] is not UTF-8 encoded
+      //   Saving is disabled.
+      //   See Console for more details.
+      return true;
     };
     
     NotebookList.prototype._is_viewable = function(model) {
+      var html_types = ['htm', 'html', 'xhtml', 'xml', 'mht', 'mhtml'];
+      var media_extension = ['3gp', 'avi', 'mov', 'mp4', 'm4v', 'm4a', 'mp3', 'mkv', 'ogv', 'ogm', 'ogg', 'oga', 'webm', 'wav'];
+      var image_type = ['bmp', 'gif', 'jpg', 'jpeg', 'png', 'webp'];
+      var other_type = ['ico'];
+      var viewable_extensions = [].concat(html_types, media_extension, image_type, other_type);
       return model.mimetype === 'text/html' 
-        || includes_extension(model.path, NotebookList.viewable_extensions);
+        || includes_extension(model.path, viewable_extensions);
+    };
+    
+    // Files like PDF that should be opened using `/files` prefix
+    NotebookList.prototype._is_pdflike = function(model) {
+      var pdflike_extensions = ['pdf'];
+      return includes_extension(model.path, pdflike_extensions);
     };
 
     /**
@@ -715,6 +767,7 @@ define([
     };
 
     NotebookList.prototype.add_link = function (model, item) {
+        var that = this;
         var running = (model.type === 'notebook' && this.sessions[model.path] !== undefined);
         item.data('name',model.name);
         item.data('path', model.path);
@@ -726,17 +779,13 @@ define([
             icon = 'running_' + icon;
         }
         var uri_prefix = NotebookList.uri_prefixes[model.type];
-        if (model.type === 'file' && !this._is_editable(model))
-        {
-            uri_prefix = 'files';
-        }
         if (model.type === 'file' && this._is_viewable(model))
         {
             uri_prefix = 'view';
         }
-        if (model.type === 'file' && this._is_editable(model))
+        if (model.type === 'file' && this._is_pdflike(model))
         {
-            uri_prefix = 'edit';
+            uri_prefix = 'files';
         }
         if (model.type === 'file' && this._is_notebook(model))
         {
@@ -758,7 +807,21 @@ define([
         // directory nav doesn't open new tabs
         // files, notebooks do
         if (model.type !== "directory") {
-            link.attr('target',IPython._target);
+            link.attr('target', IPython._target);
+        } else {
+            // Replace with a click handler that will use the History API to
+            // push a new route without reloading the page
+            link.click(function (e) {
+                window.history.pushState({
+                    path: model.path
+                }, model.path, utils.url_path_join(
+                    that.base_url,
+                    'tree',
+                    utils.encode_uri_components(model.path)
+                ));
+                that.update_location(model.path);
+                return false;
+            });
         }
         
         // Add in the date that the file was last modified
@@ -1189,7 +1252,7 @@ define([
                         .css('position', 'absolute');
 
                     var parse_large_file = function (f, item) {
-                        // codes inspired by http://stackoverflow.com/a/28318964
+                        // codes inspired by https://stackoverflow.com/a/28318964
                         var chunk_size = 1024 * 1024;
                         var offset = 0;
                         var chunk = 0;

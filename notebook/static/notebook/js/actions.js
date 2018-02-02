@@ -36,8 +36,8 @@ define([
         Object.seal(this);
     };
 
-    var $ = require('jquery');
-    var events =  require('base/js/events');
+    var $ = requirejs('jquery');
+    var events =  requirejs('base/js/events');
 
     /**
      *  A bunch of predefined `Simple Actions` used by Jupyter.
@@ -117,6 +117,7 @@ define([
             }
         },
         'confirm-restart-kernel-and-run-all-cells': {
+            icon: 'fa-forward',
             cmd: i18n.msg._('confirm restart kernel and run all cells'),
             help: i18n.msg._('restart the kernel, then re-run the whole notebook (with dialog)'),
             handler: function (env) {
@@ -684,6 +685,16 @@ define([
                 }
             }
         },
+        'auto-indent': {
+            cmd: i18n.msg._('automatically indent selection'),
+            help : i18n.msg._('automatically indent selection'),
+            handler : function(env) {
+              // Get selected cell
+              var selected_cell = env.notebook.get_selected_cell();
+              // Execute a CM command
+              selected_cell.code_mirror.execCommand('indentAuto');
+            }
+        }
     };
 
     /**
@@ -949,12 +960,12 @@ define([
 
     ActionHandler.prototype.get_name = function(name_or_data){
         /**
-         * given an `action` or `name` of a action, return the name attached to this action.
+         * given an `action` or `name` of an action, return the name attached to this action.
          * if given the name of and corresponding actions does not exist in registry, return `null`.
          **/
 
         if(typeof(name_or_data) === 'string'){
-            warn_bad_name(name);
+            warn_bad_name(name_or_data);
             if(this.exists(name_or_data)){
                 return name_or_data;
             } else {

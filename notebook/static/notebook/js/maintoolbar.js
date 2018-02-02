@@ -7,7 +7,7 @@ define([
     './toolbar',
     './celltoolbar',
     'base/js/i18n'
-], function($, require, toolbar, celltoolbar, i18n) {
+], function($, requirejs, toolbar, celltoolbar, i18n) {
     "use strict";
 
     var MainToolBar = function (selector, options) {
@@ -53,7 +53,8 @@ define([
           [ [new toolbar.Button('jupyter-notebook:run-cell-and-select-next',
                 {label: i18n.msg._('Run')}),
              'jupyter-notebook:interrupt-kernel',
-             'jupyter-notebook:confirm-restart-kernel'
+             'jupyter-notebook:confirm-restart-kernel',
+             'jupyter-notebook:confirm-restart-kernel-and-run-all-cells'
             ],
             'run_int'],
          ['<add_celltype_list>'],
@@ -61,7 +62,7 @@ define([
         ];
         this.construct(grps);
     };
-   
+
     MainToolBar.prototype._pseudo_actions = {};
 
     // add a cell type drop down to the maintoolbar.
@@ -80,11 +81,17 @@ define([
             .append(multiselect);
         this.notebook.keyboard_manager.register_events(sel);
         this.events.on('selected_cell_type_changed.Notebook', function (event, data) {
-            if ( that.notebook.get_selected_cells_indices().length > 1) {
+            if (data.editable === false) {
+                sel.attr('disabled', true);
+            } else {
+                sel.removeAttr('disabled');
+            }
+
+            if (that.notebook.get_selected_cells_indices().length > 1) {
                 multiselect.show();
                 sel.val('multiselect');
             } else {
-                multiselect.hide()
+                multiselect.hide();
                 if (data.cell_type === 'heading') {
                     sel.val('Markdown');
                 } else {

@@ -100,7 +100,7 @@ def find_package_data():
     """
     Find package_data.
     """
-    # This is not enough for these things to appear in an sdist.
+    # This is not enough for these things to appear in a sdist.
     # We need to muck with the MANIFEST to get this to work
     
     # exclude components and less from the walk;
@@ -210,6 +210,7 @@ def find_package_data():
         'notebook.tests' : js_tests,
         'notebook.bundler.tests': ['resources/*', 'resources/*/*', 'resources/*/*/.*'],
         'notebook.services.api': ['api.yaml'],
+        'notebook.i18n': ['*/LC_MESSAGES/*.*'],
     }
     
     return package_data
@@ -397,6 +398,28 @@ class Bower(Command):
         update_package_data(self.distribution)
 
 
+def patch_out_bootstrap_bw_print():
+    """Hack! Manually patch out the bootstrap rule that forces printing in B&W.
+
+    We haven't found a way to override this rule with another one.
+    """
+    print_less = pjoin(static, 'components', 'bootstrap', 'less', 'print.less')
+    with open(print_less) as f:
+        lines = f.readlines()
+
+    for ix, line in enumerate(lines):
+        if 'Black prints faster' in line:
+            break
+    else:
+        return  # Already patched out, nothing to do.
+
+    rmed = lines.pop(ix)
+    print("Removed line", ix, "from bootstrap print.less:")
+    print("-", rmed)
+    print()
+    with open(print_less, 'w') as f:
+        f.writelines(lines)
+
 class CompileCSS(Command):
     """Recompile Notebook CSS
     
@@ -423,6 +446,8 @@ class CompileCSS(Command):
         self.run_command('jsdeps')
         env = os.environ.copy()
         env['PATH'] = npm_path
+
+        patch_out_bootstrap_bw_print()
         
         for src, dst in zip(self.sources, self.targets):
             try:

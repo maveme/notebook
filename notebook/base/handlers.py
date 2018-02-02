@@ -3,6 +3,7 @@
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
+import datetime
 import functools
 import json
 import mimetypes
@@ -15,15 +16,17 @@ import warnings
 try:
     # py3
     from http.client import responses
+    from http.cookies import Morsel
 except ImportError:
     from httplib import responses
+    from Cookie import Morsel
 try:
     from urllib.parse import urlparse # Py 3
 except ImportError:
     from urlparse import urlparse # Py 2
 
 from jinja2 import TemplateNotFound
-from tornado import web, gen, escape
+from tornado import web, gen, escape, httputil
 from tornado.log import app_log
 
 from notebook._sysinfo import get_sys_info
@@ -34,6 +37,7 @@ from ipython_genutils.py3compat import string_types
 
 import notebook
 from notebook._tz import utcnow
+from notebook.i18n import combine_translations
 from notebook.utils import is_hidden, url_path_join, url_is_absolute, url_escape
 from notebook.services.security import csp_report_uri
 
@@ -89,10 +93,43 @@ class AuthenticatedHandler(web.RequestHandler):
                 # if method is unsupported (websocket and Access-Control-Allow-Origin
                 # for example, so just ignore)
                 self.log.debug(e)
-    
+
+    def force_clear_cookie(self, name, path="/", domain=None):
+        """Deletes the cookie with the given name.
+
+        Tornado's cookie handling currently (Jan 2018) stores cookies in a dict
+        keyed by name, so it can only modify one cookie with a given name per
+        response. The browser can store multiple cookies with the same name
+        but different domains and/or paths. This method lets us clear multiple
+        cookies with the same name.
+
+        Due to limitations of the cookie protocol, you must pass the same
+        path and domain to clear a cookie as were used when that cookie
+        was set (but there is no way to find out on the server side
+        which values were used for a given cookie).
+        """
+        name = escape.native_str(name)
+        expires = datetime.datetime.utcnow() - datetime.timedelta(days=365)
+
+        morsel = Morsel()
+        morsel.set(name, '', '""')
+        morsel['expires'] = httputil.format_timestamp(expires)
+        morsel['path'] = path
+        if domain:
+            morsel['domain'] = domain
+        self.add_header("Set-Cookie", morsel.OutputString())
+
     def clear_login_cookie(self):
-        self.clear_cookie(self.cookie_name)
-    
+        cookie_options = self.settings.get('cookie_options', {})
+        path = cookie_options.setdefault('path', self.base_url)
+        self.clear_cookie(self.cookie_name, path=path)
+        if path and path != '/':
+            # also clear cookie on / to ensure old cookies are cleared
+            # after the change in path behavior (changed in notebook 5.2.2).
+            # N.B. This bypasses the normal cookie handling, which can't update
+            # two cookies with the same name. See the method above.
+            self.force_clear_cookie(self.cookie_name)
+
     def get_current_user(self):
         if self.login_handler is None:
             return 'anonymous'
@@ -104,6 +141,9 @@ class AuthenticatedHandler(web.RequestHandler):
         For example: in the default LoginHandler, if a request is token-authenticated,
         origin checking should be skipped.
         """
+        if self.request.method == 'OPTIONS':
+            # no origin-check on options requests, which are used to check origins!
+            return True
         if self.login_handler is None or not hasattr(self.login_handler, 'should_check_origin'):
             return False
         return not self.login_handler.should_check_origin(self)
@@ -278,6 +318,16 @@ class IPythonHandler(AuthenticatedHandler):
             origin = self.get_origin()
             if origin and self.allow_origin_pat.match(origin):
                 self.set_header("Access-Control-Allow-Origin", origin)
+        elif (
+            self.token_authenticated
+            and "Access-Control-Allow-Origin" not in
+                self.settings.get('headers', {})
+        ):
+            # allow token-authenticated requests cross-origin by default.
+            # only apply this exception if allow-origin has not been specified.
+            self.set_header('Access-Control-Allow-Origin',
+                self.request.headers.get('Origin', ''))
+
         if self.allow_credentials:
             self.set_header("Access-Control-Allow-Credentials", 'true')
     
@@ -380,6 +430,7 @@ class IPythonHandler(AuthenticatedHandler):
             default_url=self.default_url,
             ws_url=self.ws_url,
             logged_in=self.logged_in,
+            allow_password_change=self.settings.get('allow_password_change'),
             login_available=self.login_available,
             token_available=bool(self.token or self.one_time_token),
             static_url=self.static_url,
@@ -390,6 +441,8 @@ class IPythonHandler(AuthenticatedHandler):
             xsrf_form_html=self.xsrf_form_html,
             token=self.token,
             xsrf_token=self.xsrf_token.decode('utf8'),
+            nbjs_translations=json.dumps(combine_translations(
+                self.request.headers.get('Accept-Language', ''))),
             **self.jinja_template_vars
         )
     
@@ -464,8 +517,10 @@ class APIHandler(IPythonHandler):
             e = exc_info[1]
             if isinstance(e, HTTPError):
                 reply['message'] = e.log_message or message
+                reply['reason'] = e.reason
             else:
                 reply['message'] = 'Unhandled error'
+                reply['reason'] = None
                 reply['traceback'] = ''.join(traceback.format_exception(*exc_info))
         self.log.warning(reply['message'])
         self.finish(json.dumps(reply))
@@ -476,9 +531,15 @@ class APIHandler(IPythonHandler):
         if hasattr(self, '_user_cache'):
             return self._user_cache
         self._user_cache = user = super(APIHandler, self).get_current_user()
-        if user is None:
-            raise web.HTTPError(403)
         return user
+
+    def get_login_url(self):
+        # if get_login_url is invoked in an API handler,
+        # that means @web.authenticated is trying to trigger a redirect.
+        # instead of redirecting, raise 403 instead.
+        if not self.current_user:
+            raise web.HTTPError(403)
+        return super(APIHandler, self).get_login_url()
 
     @property
     def content_security_policy(self):
@@ -494,7 +555,7 @@ class APIHandler(IPythonHandler):
     def update_api_activity(self):
         """Update last_activity of API requests"""
         # record activity of authenticated requests
-        if self._track_activity and self.get_current_user():
+        if self._track_activity and getattr(self, '_user_cache', None):
             self.settings['api_last_activity'] = utcnow()
 
     def finish(self, *args, **kwargs):
@@ -503,10 +564,32 @@ class APIHandler(IPythonHandler):
         return super(APIHandler, self).finish(*args, **kwargs)
 
     def options(self, *args, **kwargs):
-        self.set_header('Access-Control-Allow-Headers', 'accept, content-type, authorization')
+        self.set_header('Access-Control-Allow-Headers',
+                        'accept, content-type, authorization, x-xsrftoken')
         self.set_header('Access-Control-Allow-Methods',
                         'GET, PUT, POST, PATCH, DELETE, OPTIONS')
-        self.finish()
+
+        # if authorization header is requested,
+        # that means the request is token-authenticated.
+        # avoid browser-side rejection of the preflight request.
+        # only allow this exception if allow_origin has not been specified
+        # and notebook authentication is enabled.
+        # If the token is not valid, the 'real' request will still be rejected.
+        requested_headers = self.request.headers.get('Access-Control-Request-Headers', '').split(',')
+        if requested_headers and any(
+            h.strip().lower() == 'authorization'
+            for h in requested_headers
+        ) and (
+            # FIXME: it would be even better to check specifically for token-auth,
+            # but there is currently no API for this.
+            self.login_available
+        ) and (
+            self.allow_origin
+            or self.allow_origin_pat
+            or 'Access-Control-Allow-Origin' in self.settings.get('headers', {})
+        ):
+            self.set_header('Access-Control-Allow-Origin',
+                self.request.headers.get('Origin', ''))
 
 
 class Template404(IPythonHandler):
@@ -559,8 +642,8 @@ class AuthenticatedFileHandler(IPythonHandler, web.StaticFileHandler):
         """
         abs_path = super(AuthenticatedFileHandler, self).validate_absolute_path(root, absolute_path)
         abs_root = os.path.abspath(root)
-        if is_hidden(abs_path, abs_root):
-            self.log.info("Refusing to serve hidden file, via 404 Error")
+        if is_hidden(abs_path, abs_root) and not self.contents_manager.allow_hidden:
+            self.log.info("Refusing to serve hidden file, via 404 Error, use flag 'ContentsManager.allow_hidden' to enable")
             raise web.HTTPError(404)
         return abs_path
 

@@ -24,8 +24,10 @@ import signal
 import socket
 import sys
 import threading
+import time
 import warnings
 import webbrowser
+import hmac
 
 try: #PY3
     from base64 import encodebytes
@@ -102,7 +104,7 @@ from ipython_genutils import py3compat
 from jupyter_core.paths import jupyter_runtime_dir, jupyter_path
 from notebook._sysinfo import get_sys_info
 
-from ._tz import utcnow
+from ._tz import utcnow, utcfromtimestamp
 from .utils import url_path_join, check_pid, url_escape
 
 #-----------------------------------------------------------------------------
@@ -132,7 +134,6 @@ def random_ports(port, n):
 
 def load_handlers(name):
     """Load the (URL pattern, handler) tuples for each component."""
-    name = 'notebook.' + name
     mod = __import__(name, fromlist=['default_handlers'])
     return mod.default_handlers
 
@@ -144,21 +145,22 @@ class NotebookWebApplication(web.Application):
 
     def __init__(self, jupyter_app, kernel_manager, contents_manager,
                  session_manager, kernel_spec_manager,
-                 config_manager, log,
+                 config_manager, extra_services, log,
                  base_url, default_url, settings_overrides, jinja_env_options):
 
 
         settings = self.init_settings(
             jupyter_app, kernel_manager, contents_manager,
-            session_manager, kernel_spec_manager, config_manager, log,
-            base_url, default_url, settings_overrides, jinja_env_options)
+            session_manager, kernel_spec_manager, config_manager,
+            extra_services, log, base_url,
+            default_url, settings_overrides, jinja_env_options)
         handlers = self.init_handlers(settings)
 
         super(NotebookWebApplication, self).__init__(handlers, **settings)
 
     def init_settings(self, jupyter_app, kernel_manager, contents_manager,
                       session_manager, kernel_spec_manager,
-                      config_manager,
+                      config_manager, extra_services,
                       log, base_url, default_url, settings_overrides,
                       jinja_env_options=None):
 
@@ -257,6 +259,9 @@ class NotebookWebApplication(web.Application):
             kernel_spec_manager=kernel_spec_manager,
             config_manager=config_manager,
 
+            # handlers
+            extra_services=extra_services,
+
             # Jupyter stuff
             started=now,
             jinja_template_vars=jupyter_app.jinja_template_vars,
@@ -266,6 +271,7 @@ class NotebookWebApplication(web.Application):
             mathjax_config=jupyter_app.mathjax_config,
             config=jupyter_app.config,
             config_dir=jupyter_app.config_dir,
+            allow_password_change=jupyter_app.allow_password_change,
             server_root_dir=root_dir,
             jinja2_env=env,
             terminals_available=False,  # Set later if terminals are available
@@ -277,29 +283,33 @@ class NotebookWebApplication(web.Application):
 
     def init_handlers(self, settings):
         """Load the (URL pattern, handler) tuples for each component."""
-        
+
         # Order matters. The first handler to match the URL will handle the request.
         handlers = []
-        handlers.extend(load_handlers('tree.handlers'))
+        # load extra services specified by users before default handlers
+        for service in settings['extra_services']:
+            handlers.extend(load_handlers(service))
+        handlers.extend(load_handlers('notebook.tree.handlers'))
         handlers.extend([(r"/login", settings['login_handler_class'])])
         handlers.extend([(r"/logout", settings['logout_handler_class'])])
-        handlers.extend(load_handlers('files.handlers'))
-        handlers.extend(load_handlers('view.handlers'))
-        handlers.extend(load_handlers('notebook.handlers'))
-        handlers.extend(load_handlers('nbconvert.handlers'))
-        handlers.extend(load_handlers('bundler.handlers'))
-        handlers.extend(load_handlers('kernelspecs.handlers'))
-        handlers.extend(load_handlers('edit.handlers'))
-        handlers.extend(load_handlers('services.api.handlers'))
-        handlers.extend(load_handlers('services.config.handlers'))
-        handlers.extend(load_handlers('services.kernels.handlers'))
-        handlers.extend(load_handlers('services.contents.handlers'))
-        handlers.extend(load_handlers('services.sessions.handlers'))
-        handlers.extend(load_handlers('services.nbconvert.handlers'))
-        handlers.extend(load_handlers('services.kernelspecs.handlers'))
-        handlers.extend(load_handlers('services.security.handlers'))
-        handlers.extend(load_handlers('services.shutdown'))
-        
+        handlers.extend(load_handlers('notebook.files.handlers'))
+        handlers.extend(load_handlers('notebook.view.handlers'))
+        handlers.extend(load_handlers('notebook.notebook.handlers'))
+        handlers.extend(load_handlers('notebook.nbconvert.handlers'))
+        handlers.extend(load_handlers('notebook.bundler.handlers'))
+        handlers.extend(load_handlers('notebook.kernelspecs.handlers'))
+        handlers.extend(load_handlers('notebook.edit.handlers'))
+        handlers.extend(load_handlers('notebook.services.api.handlers'))
+        handlers.extend(load_handlers('notebook.services.config.handlers'))
+        handlers.extend(load_handlers('notebook.services.kernels.handlers'))
+        handlers.extend(load_handlers('notebook.services.contents.handlers'))
+        handlers.extend(load_handlers('notebook.services.sessions.handlers'))
+        handlers.extend(load_handlers('notebook.services.nbconvert.handlers'))
+        handlers.extend(load_handlers('notebook.services.kernelspecs.handlers'))
+        handlers.extend(load_handlers('notebook.services.security.handlers'))
+        handlers.extend(load_handlers('notebook.services.shutdown'))
+        handlers.extend(settings['contents_manager'].get_extra_handlers())
+
         handlers.append(
             (r"/nbextensions/(.*)", FileFindHandler, {
                 'path': settings['nbextensions_path'],
@@ -313,7 +323,7 @@ class NotebookWebApplication(web.Application):
             })
         )
         # register base handlers last
-        handlers.extend(load_handlers('base.handlers'))
+        handlers.extend(load_handlers('notebook.base.handlers'))
         # set the URL that will be redirected from `/`
         handlers.append(
             (r'/?', RedirectWithParams, {
@@ -331,6 +341,26 @@ class NotebookWebApplication(web.Application):
         # add 404 on the end, which will catch everything that falls through
         new_handlers.append((r'(.*)', Template404))
         return new_handlers
+
+    def last_activity(self):
+        """Get a UTC timestamp for when the server last did something.
+
+        Includes: API activity, kernel activity, kernel shutdown, and terminal
+        activity.
+        """
+        sources = [
+            self.settings['started'],
+            self.settings['kernel_manager'].last_kernel_activity,
+        ]
+        try:
+            sources.append(self.settings['api_last_activity'])
+        except KeyError:
+            pass
+        try:
+            sources.append(self.settings['terminal_last_activity'])
+        except KeyError:
+            pass
+        return max(sources)
 
 
 class NotebookPasswordApp(JupyterApp):
@@ -350,6 +380,51 @@ class NotebookPasswordApp(JupyterApp):
         set_password(config_file=self.config_file)
         self.log.info("Wrote hashed password to %s" % self.config_file)
 
+def shutdown_server(server_info, timeout=5, log=None):
+    """Shutdown a notebook server in a separate process.
+
+    *server_info* should be a dictionary as produced by list_running_servers().
+
+    Will first try to request shutdown using /api/shutdown .
+    On Unix, if the server is still running after *timeout* seconds, it will
+    send SIGTERM. After another timeout, it escalates to SIGKILL.
+
+    Returns True if the server was stopped by any means, False if stopping it
+    failed (on Windows).
+    """
+    from tornado.httpclient import HTTPClient, HTTPRequest
+    url = server_info['url']
+    pid = server_info['pid']
+    req = HTTPRequest(url + 'api/shutdown', method='POST', body=b'', headers={
+        'Authorization': 'token ' + server_info['token']
+    })
+    if log: log.debug("POST request to %sapi/shutdown", url)
+    HTTPClient().fetch(req)
+
+    # Poll to see if it shut down.
+    for _ in range(timeout*10):
+        if check_pid(pid):
+            if log: log.debug("Server PID %s is gone", pid)
+            return True
+        time.sleep(0.1)
+
+    if sys.platform.startswith('win'):
+        return False
+
+    if log: log.debug("SIGTERM to PID %s", pid)
+    os.kill(pid, signal.SIGTERM)
+
+    # Poll to see if it shut down.
+    for _ in range(timeout * 10):
+        if check_pid(pid):
+            if log: log.debug("Server PID %s is gone", pid)
+            return True
+        time.sleep(0.1)
+
+    if log: log.debug("SIGKILL to PID %s", pid)
+    os.kill(pid, signal.SIGKILL)
+    return True  # SIGKILL cannot be caught
+
 
 class NbserverStopApp(JupyterApp):
     version = __version__
@@ -363,14 +438,18 @@ class NbserverStopApp(JupyterApp):
         if self.extra_args:
             self.port=int(self.extra_args[0])
 
+    def shutdown_server(self, server):
+        return shutdown_server(server, log=self.log)
+
     def start(self):
         servers = list(list_running_servers(self.runtime_dir))
         if not servers:
             self.exit("There are no running servers")
         for server in servers:
             if server['port'] == self.port:
-                self.log.debug("Shutting down notebook server with PID: %i", server['pid'])
-                os.kill(server['pid'], signal.SIGTERM)
+                print("Shutting down server on port", self.port, "...")
+                if not self.shutdown_server(server):
+                    sys.exit("Could not stop server")
                 return
         else:
             print("There is currently no server running on port {}".format(self.port), file=sys.stderr)
@@ -623,11 +702,16 @@ class NotebookApp(JupyterApp):
     def _default_cookie_secret(self):
         if os.path.exists(self.cookie_secret_file):
             with io.open(self.cookie_secret_file, 'rb') as f:
-                return f.read()
+                key =  f.read()
         else:
-            secret = encodebytes(os.urandom(1024))
-            self._write_cookie_secret_file(secret)
-            return secret
+            key = encodebytes(os.urandom(1024))
+            self._write_cookie_secret_file(key)
+        h = hmac.HMAC(key)
+        h.digest_size = len(key)
+        h.update(self.password.encode())
+        return h.digest()
+
+
     
     def _write_cookie_secret_file(self, secret):
         """write my secret to my secret_file"""
@@ -662,6 +746,9 @@ class NotebookApp(JupyterApp):
 
     @default('token')
     def _token_default(self):
+        if os.getenv('JUPYTER_TOKEN'):
+            self._token_generated = False
+            return os.getenv('JUPYTER_TOKEN')
         if self.password:
             # no token if password is enabled
             self._token_generated = False
@@ -695,6 +782,18 @@ class NotebookApp(JupyterApp):
 
                       """
     )
+
+    allow_password_change = Bool(True, config=True, 
+                    help="""Allow password to be changed at login for the notebook server. 
+
+                    While loggin in with a token, the notebook server UI will give the opportunity to
+                    the user to enter a new password at the same time that will replace
+                    the token login mechanism. 
+
+                    This can be set to false to prevent changing password from the UI/API.
+                    """
+    )
+
 
     disable_check_xsrf = Bool(False, config=True,
         help="""Disable cross-site-request-forgery protection
@@ -859,6 +958,10 @@ class NotebookApp(JupyterApp):
 
     extra_nbextensions_path = List(Unicode(), config=True,
         help=_("""extra paths to look for Javascript notebook extensions""")
+    )
+
+    extra_services = List(Unicode(), config=True,
+        help=_("""handlers that should be loaded at higher priority than the default services""")
     )
     
     @property
@@ -1066,6 +1169,16 @@ class NotebookApp(JupyterApp):
     rate_limit_window = Float(3, config=True, help=_("""(sec) Time window used to 
         check the message and data rate limits."""))
 
+    shutdown_no_activity_timeout = Integer(0, config=True,
+        help=("Shut down the server after N seconds with no kernels or "
+              "terminals running and no activity. "
+              "This can be used together with culling idle kernels "
+              "(MappingKernelManager.cull_idle_timeout) to "
+              "shutdown the notebook server when it's not in use. This is not "
+              "precisely timed: it may shut down up to a minute later. "
+              "0 (the default) disables this automatic shutdown.")
+    )
+
     def parse_command_line(self, argv=None):
         super(NotebookApp, self).parse_command_line(argv)
 
@@ -1152,7 +1265,7 @@ class NotebookApp(JupyterApp):
         self.web_app = NotebookWebApplication(
             self, self.kernel_manager, self.contents_manager,
             self.session_manager, self.kernel_spec_manager,
-            self.config_manager,
+            self.config_manager, self.extra_services,
             self.log, self.base_url, self.default_url, self.tornado_settings,
             self.jinja_environment_options
         )
@@ -1225,8 +1338,7 @@ class NotebookApp(JupyterApp):
             initialize(self.web_app, self.notebook_dir, self.connection_url, self.terminado_settings)
             self.web_app.settings['terminals_available'] = True
         except ImportError as e:
-            log = self.log.debug if sys.platform == 'win32' else self.log.warning
-            log(_("Terminals not available (error was %s)"), e)
+            self.log.warning(_("Terminals not available (error was %s)"), e)
 
     def init_signal(self):
         if not sys.platform.startswith('win') and sys.stdin and sys.stdin.isatty():
@@ -1353,6 +1465,37 @@ class NotebookApp(JupyterApp):
         # mimetype always needs to be text/css, so we override it here.
         mimetypes.add_type('text/css', '.css')
 
+
+    def shutdown_no_activity(self):
+        """Shutdown server on timeout when there are no kernels or terminals."""
+        km = self.kernel_manager
+        if len(km) != 0:
+            return   # Kernels still running
+
+        try:
+            term_mgr = self.web_app.settings['terminal_manager']
+        except KeyError:
+            pass  # Terminals not enabled
+        else:
+            if term_mgr.terminals:
+                return   # Terminals still running
+
+        seconds_since_active = \
+            (utcnow() - self.web_app.last_activity()).total_seconds()
+        self.log.debug("No activity for %d seconds.",
+                       seconds_since_active)
+        if seconds_since_active > self.shutdown_no_activity_timeout:
+            self.log.info("No kernels or terminals for %d seconds; shutting down.",
+                          seconds_since_active)
+            self.stop()
+
+    def init_shutdown_no_activity(self):
+        if self.shutdown_no_activity_timeout > 0:
+            self.log.info("Will shut down after %d seconds with no kernels or terminals.",
+                          self.shutdown_no_activity_timeout)
+            pc = ioloop.PeriodicCallback(self.shutdown_no_activity, 60000)
+            pc.start()
+
     @catch_config_error
     def initialize(self, argv=None):
         super(NotebookApp, self).initialize(argv)
@@ -1366,6 +1509,7 @@ class NotebookApp(JupyterApp):
         self.init_signal()
         self.init_server_extensions()
         self.init_mime_overrides()
+        self.init_shutdown_no_activity()
 
     def cleanup_kernels(self):
         """Shutdown all kernels.
@@ -1444,7 +1588,7 @@ class NotebookApp(JupyterApp):
             info(_("Welcome to Project Jupyter! Explore the various tools available"
                  " and their corresponding documentation. If you are interested"
                  " in contributing to the platform, please visit the community"
-                 "resources section at http://jupyter.org/community.html."))
+                 "resources section at https://jupyter.org/community.html."))
 
         self.write_server_info_file()
 

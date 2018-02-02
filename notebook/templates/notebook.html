@@ -46,7 +46,7 @@ data-notebook-path="{{notebook_path | urlencode}}"
 
 <span id="kernel_logo_widget">
   {% block kernel_logo_widget %}
-  <img class="current_kernel_logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"/>
+  <img class="current_kernel_logo" alt="Current Kernel Logo" src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"/>
   {% endblock %}
 </span>
 
@@ -275,7 +275,7 @@ data-notebook-path="{{notebook_path | urlencode}}"
                         </li>
                         <li id="shutdown_kernel"
                             title="Shutdown the Kernel">
-                            <a href="#">Shutdown</a>
+                            <a href="#">{% trans %}Shutdown{% endtrans %}</a>
                         </li>
                         <li class="divider"></li>
                         <li id="menu-change-kernel" class="dropdown-submenu">
