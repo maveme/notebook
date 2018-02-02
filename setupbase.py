@@ -140,6 +140,7 @@ def find_package_data():
         pjoin(components, "es6-promise", "*.js"),
         pjoin(components, "font-awesome", "fonts", "*.*"),
         pjoin(components, "google-caja", "html-css-sanitizer-minified.js"),
+        pjoin(components, "jed", "jed.js"),
         pjoin(components, "jquery", "jquery.min.js"),
         pjoin(components, "jquery-typeahead", "dist", "jquery.typeahead.min.js"),
         pjoin(components, "jquery-typeahead", "dist", "jquery.typeahead.min.css"),
@@ -151,9 +152,11 @@ def find_package_data():
         pjoin(components, "preact-compat", "index.js"),
         pjoin(components, "proptypes", "index.js"),
         pjoin(components, "requirejs", "require.js"),
+        pjoin(components, "requirejs-plugins", "src", "json.js"),
+        pjoin(components, "requirejs-text", "text.js"),
         pjoin(components, "underscore", "underscore-min.js"),
         pjoin(components, "moment", "moment.js"),
-        pjoin(components, "moment", "min", "moment.min.js"),
+        pjoin(components, "moment", "min", "*.js"),
         pjoin(components, "xterm.js", "dist", "xterm.js"),
         pjoin(components, "xterm.js", "dist", "xterm.css"),
         pjoin(components, "text-encoding", "lib", "encoding.js"),
@@ -191,6 +194,7 @@ def find_package_data():
         mj('jax', 'input', 'TeX'),
         mj('jax', 'output', 'HTML-CSS', 'fonts', 'STIX-Web'),
         mj('jax', 'output', 'SVG', 'fonts', 'STIX-Web'),
+        mj('jax', 'element', 'mml'),
     ]:
         for parent, dirs, files in os.walk(tree):
             for f in files:
@@ -364,15 +368,6 @@ class Bower(Command):
             return True
         return mtime(self.node_modules) < mtime(pjoin(repo_root, 'package.json'))
 
-    def patch_codemirror(self):
-        """Patch CodeMirror until https://github.com/codemirror/CodeMirror/issues/4454 is resolved"""
-        
-        try:
-            shutil.copyfile('tools/patches/codemirror.js', 'notebook/static/components/codemirror/lib/codemirror.js')
-        except OSError as e:
-            print("Failed to patch codemirror.js: %s" % e, file=sys.stderr)
-            raise
-            
     def run(self):
         if not self.should_run():
             print("bower dependencies up to date")
@@ -396,7 +391,6 @@ class Bower(Command):
             print("Failed to run bower: %s" % e, file=sys.stderr)
             print("You can install js dependencies with `npm install`", file=sys.stderr)
             raise
-        self.patch_codemirror()
         # self.npm_components()
         os.utime(self.bower_dir, None)
         # update package data in case this created new files

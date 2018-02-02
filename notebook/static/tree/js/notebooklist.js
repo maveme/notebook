@@ -5,11 +5,13 @@ define([
     'jquery',
     'base/js/namespace',
     'base/js/utils',
+    'base/js/i18n',
     'base/js/dialog',
     'base/js/events',
     'base/js/keyboard',
-    'moment'
-], function($, IPython, utils, dialog, events, keyboard, moment) {
+    'moment',
+    'bidi/bidi'
+], function($, IPython, utils, i18n, dialog, events, keyboard, moment, bidi) {
     "use strict";
 
     var extension = function(path){
@@ -22,14 +24,49 @@ define([
       return parts[parts.length-1];
     };
 
-    var extension_in = function(extension, extensionslist){
-      var res =  extensionslist.indexOf(extension) != -1;
-      return res;
-
+    var item_in = function(item, list) {
+      return list.indexOf(item) != -1;
     };
 
-    var filepath_of_extension = function(filepath, extensionslist){
-      return extension_in(extension(filepath), extensionslist);
+    var includes_extension = function(filepath, extensionslist) {
+      return item_in(extension(filepath), extensionslist);
+    };
+
+    var json_or_xml_container_mimetype = function(mimetype) {
+      // Match */*+json or */*+xml
+      return (mimetype.substring(mimetype.length - 5) == '+json'
+              || mimetype.substring(mimetype.length - 4) == '+xml');
+    };
+
+    function name_sorter(ascending) {
+        return (function(a, b) {
+            if (type_order[a['type']] < type_order[b['type']]) {
+                return -1;
+            }
+            if (type_order[a['type']] > type_order[b['type']]) {
+                return 1;
+            }
+            if (a['name'].toLowerCase() < b['name'].toLowerCase()) {
+                return (ascending) ? -1 : 1;
+            }
+            if (a['name'].toLowerCase() > b['name'].toLowerCase()) {
+                return (ascending) ? 1 : -1;
+            }
+            return 0;
+        });
+    };
+
+    function modified_sorter(ascending) {
+        var order = ascending ? 1 : 0;
+        return (function(a, b) {
+            return utils.datetime_sort_helper(a.last_modified, b.last_modified,
+                                              order)
+        });
+    }
+
+    var sort_functions = {
+        'sort-name': name_sorter,
+        'last-modified': modified_sorter
     };
 
     var NotebookList = function (selector, options) {
@@ -67,11 +104,10 @@ define([
                 function(e, d) { that.sessions_loaded(d); });
         }
         this.selected = [];
+        this.sort_function = name_sorter(1);
         // 0 => descending, 1 => ascending
-        this.sort_state = {
-            'last-modified': 0,
-            'sort-name': 0
-        };
+        this.sort_id = 'sort-name';
+        this.sort_direction = 1;
         this._max_upload_size_mb = 25;
         this.EDIT_MIMETYPES = [
           'application/javascript',
@@ -92,8 +128,6 @@ define([
     NotebookList.prototype.bind_events = function () {
         var that = this;
         $('#refresh_' + this.element_name + '_list').click(function () {
-            $("#sort-name i").removeClass("fa-arrow-down").addClass("fa-arrow-up");
-            $("#last-modified i").removeClass("fa-arrow-down").addClass("fa-arrow-up");
             that.load_sessions();
         });
         this.element.bind('dragover', function () {
@@ -118,9 +152,9 @@ define([
                 }).catch(function (e) {
                     w.close();
                     dialog.modal({
-                        title: 'Creating File Failed',
+                        title: i18n.msg._('Creating File Failed'),
                         body: $('<div/>')
-                            .text("An error occurred while creating a new file.")
+                            .text(i18n.msg._("An error occurred while creating a new file."))
                             .append($('<div/>')
                                 .addClass('alert alert-danger')
                                 .text(e.message || e)),
@@ -138,9 +172,9 @@ define([
                     that.load_list();
                 }).catch(function (e) {
                     dialog.modal({
-                        title: 'Creating Folder Failed',
+                        title: i18n.msg._('Creating Folder Failed'),
                         body: $('<div/>')
-                            .text("An error occurred while creating a new folder.")
+                            .text(i18n.msg._("An error occurred while creating a new folder."))
                             .append($('<div/>')
                                 .addClass('alert alert-danger')
                                 .text(e.message || e)),
@@ -189,62 +223,30 @@ define([
             $('.sort-action').click(function(e) {
                 var sort_on = e.target.id;
 
-                if (that.sort_state.sort_on == 0) {
-                    that.sort_list(sort_on, 1);
-                    $("#" + sort_on + " i").removeClass("fa-arrow-up").addClass("fa-arrow-down");
-                    that.sort_state.sort_on = 1;
+                // Clear sort indications in UI
+                $(".sort-action i").removeClass("fa-arrow-up").removeClass("fa-arrow-down")
+
+                if ((that.sort_id === sort_on) && (that.sort_direction === 1)) {
+                    that.sort_list(sort_on, 0);
+                    $("#" + sort_on + " i").addClass("fa-arrow-up");
+                    that.sort_direction = 0;
                 } else {
-                    that.sort_list(sort_on, 2);
-                    $("#" + sort_on + " i").removeClass("fa-arrow-down").addClass("fa-arrow-up");
-                    that.sort_state.sort_on = 0;
+                    that.sort_list(sort_on, 1);
+                    $("#" + sort_on + " i").addClass("fa-arrow-down");
+                    that.sort_direction = 1;
                 }
+                that.sort_id = sort_on;
             });
         }
     };
 
     NotebookList.prototype.sort_list = function(id, order) {
-        var that = this;
-        if (id == 'last-modified') {
-            that.sort_datetime(order);
-        } else if (id == 'sort-name') {
-            that.sort_name(order);
+        if (sort_functions.hasOwnProperty(id)) {
+            this.sort_function = sort_functions[id](order);
+            this.draw_notebook_list(this.model_list, this.error_msg);
         } else {
-            console.log('id provided to sort_list function is invalid.');
+            console.error("No such sort id: '" + id + "'")
         }
-    };
-
-    NotebookList.prototype.sort_datetime = function(order) {
-        var datetime_sort_helper = function(parent, child, selector) {
-            var items = parent.children(child).sort(function(a, b) {
-                var first_date = $(selector, a).attr("title");
-                var second_date = $(selector, b).attr("title");
-                return utils.datetime_sort_helper(first_date, second_date, order);
-            });
-            parent.append(items);
-        };
-
-        datetime_sort_helper($('#notebook_list'), "div.list_item", 'span.item_modified');
-    };
-
-    NotebookList.prototype.sort_name = function(order) {
-        var name_sort_helper = function(parent, child, selector) {
-            var items = parent.children(child).sort(function(a, b) {
-                var first_name = $(selector, a).text();
-                var second_name = $(selector, b).text();
-                return (function(a, b, order) {
-                    if (a < b) {
-                        return (order == 1) ? -1 : 1;
-                    } else if (a == b) {
-                        return 0;
-                    } else {
-                        return (order == 1) ? 1 : -1;
-                    }
-                })(first_name, second_name, order);
-            });
-            parent.append(items);
-        };
-
-        name_sort_helper($('#notebook_list'), "div.list_item", 'span.item_name');
     };
 
     NotebookList.prototype.handleFilesUpload =  function(event, dropOrForm) {
@@ -267,8 +269,8 @@ define([
             var name = item.data('name');
             item.remove();
             dialog.modal({
-                title : 'Failed to read file',
-                body : "Failed to read file '" + name + "'",
+                title : i18n.msg._('Failed to read file'),
+                body : i18n.msg.sprintf(i18n.msg._("Failed to read file %s"),name),
                 buttons : {'OK' : { 'class' : 'btn-primary' }}
             });
         };
@@ -279,9 +281,11 @@ define([
             var file_ext = name_and_ext[1];
 
             if (f.size > this._max_upload_size_mb * 1024 * 1024) {
+            	var body_msg = i18n.msg.sprintf(i18n.msg._("The file size is %d MB. Do you still want to upload it?"),
+            			Math.round(f.size / (1024 * 1024)));
                 dialog.modal({
-                    title : 'Large file size warning',
-                    body : "The file size is " + Math.round(f.size / (1024 * 1024)) + "MB. Do you still want to upload it?",
+                    title : i18n.msg._('Large file size warning'),
+                    body : body_msg,
                     buttons : {
                         Cancel: {},
                         Ok: {
@@ -349,7 +353,7 @@ define([
         this.contents.list_contents(that.notebook_path).then(
             $.proxy(this.draw_notebook_list, this),
             function(error) {
-                that.draw_notebook_list({content: []}, "Server error: " + error.message);
+                that.draw_notebook_list({content: []}, i18n.msg._("Server error: ") + error.message);
             }
         );
     };
@@ -369,22 +373,12 @@ define([
         // Remember what was selected before the refresh.
         var selected_before = this.selected;
 
-        list.content.sort(function(a, b) {
-            if (type_order[a['type']] < type_order[b['type']]) {
-                return -1;
-            }
-            if (type_order[a['type']] > type_order[b['type']]) {
-                return 1;
-            }
-            if (a['name'].toLowerCase() < b['name'].toLowerCase()) {
-                return -1;
-            }
-            if (a['name'].toLowerCase() > b['name'].toLowerCase()) {
-                return 1;
-            }
-            return 0;
-        });
-        var message = error_msg || 'Notebook list empty.';
+        // Store the data to be redrawn by sorting
+        this.model_list = list;
+        this.error_msg = error_msg;
+
+        list.content.sort(this.sort_function);
+        var message = error_msg || i18n.msg._('The notebook list is empty.');
         var item = null;
         var model = null;
         var len = list.content.length;
@@ -452,12 +446,12 @@ define([
         var item = $("<div/>")
             .addClass("col-md-12")
             .appendTo(row);
-
+        
         var checkbox;
         if (selectable !== undefined) {
             checkbox = $('<input/>')
                 .attr('type', 'checkbox')
-                .attr('title', 'Click here to rename, delete, etc.')
+                .attr('title', i18n.msg._('Click here to rename, delete, etc.'))
                 .appendTo(item);
         }
 
@@ -497,7 +491,7 @@ define([
 
         $('<div/>')
             .addClass('running-indicator')
-            .text('Running')
+            .text(i18n.msg._('Running'))
             .css('visibility', 'hidden')
             .appendTo(buttons);
 
@@ -543,19 +537,29 @@ define([
     };
 
     NotebookList.ipynb_extensions = ['ipynb'];
-    NotebookList.non_editable_extensions = 'jpeg jpeg png zip gif tif tiff bmp ico pdf doc xls xlsx'.split(' ');
-    NotebookList.editable_extensions = 'txt py cson json yaml html'.split(' ');
+    // List of text file extensions from
+    // https://github.com/sindresorhus/text-extensions/blob/master/text-extensions.json
+    var editable_extensions = ['applescript', 'asp', 'aspx', 'atom', 'bashrc', 'bat', 'bbcolors', 'bib', 'bowerrc', 'c', 'cc', 'cfc', 'cfg', 'cfm', 'cmd', 'cnf', 'coffee', 'conf', 'cpp', 'cson', 'css', 'csslintrc', 'csv', 'curlrc', 'cxx', 'diff', 'eco', 'editorconfig', 'ejs', 'emacs', 'eml', 'erb', 'erl', 'eslintignore', 'eslintrc', 'gemrc', 'gitattributes', 'gitconfig', 'gitignore', 'go', 'gvimrc', 'h', 'haml', 'hbs', 'hgignore', 'hpp', 'htaccess', 'htm', 'html', 'iced', 'ini', 'ino', 'irbrc', 'itermcolors', 'jade', 'js', 'jscsrc', 'jshintignore', 'jshintrc', 'json', 'jsonld', 'jsx', 'less', 'log', 'ls', 'm', 'markdown', 'md', 'mdown', 'mdwn', 'mht', 'mhtml', 'mkd', 'mkdn', 'mkdown', 'nfo', 'npmignore', 'npmrc', 'nvmrc', 'patch', 'pbxproj', 'pch', 'php', 'phtml', 'pl', 'pm', 'properties', 'py', 'rb', 'rdoc', 'rdoc_options', 'ron', 'rss', 'rst', 'rtf', 'rvmrc', 'sass', 'scala', 'scss', 'seestyle', 'sh', 'sls', 'sql', 'sss', 'strings', 'styl', 'stylus', 'sub', 'sublime-build', 'sublime-commands', 'sublime-completions', 'sublime-keymap', 'sublime-macro', 'sublime-menu', 'sublime-project', 'sublime-settings', 'sublime-workspace', 'svg', 'terminal', 'tex', 'text', 'textile', 'tmLanguage', 'tmTheme', 'tsv', 'txt', 'vbs', 'vim', 'viminfo', 'vimrc', 'webapp', 'xht', 'xhtml', 'xml', 'xsl', 'yaml', 'yml', 'zsh', 'zshrc'];
+    NotebookList.editable_extensions = editable_extensions.concat(['ipynb', 'geojson', 'plotly', 'plotly.json', 'vg', 'vg.json', 'vl', 'vl.json']);
+    NotebookList.viewable_extensions = ['htm', 'html', 'xhtml', 'mht', 'mhtml'];
 
-    NotebookList.prototype._is_editable = function(filepath){
-      return filepath_of_extension(filepath, NotebookList.editable_extensions);
+    NotebookList.prototype._is_notebook = function(model) {
+      return includes_extension(model.path, NotebookList.ipynb_extensions);
     };
-
-    NotebookList.prototype._is_not_editable = function(filepath){
-      return filepath_of_extension(filepath, NotebookList.non_editable_extensions);
+    
+    NotebookList.prototype._is_editable = function(model) {
+      // Editable: any text/ mimetype, specific mimetypes defined as editable,
+      // +json and +xml mimetypes, specific extensions listed as editable.
+      return model.mimetype &&
+          (model.mimetype.indexOf('text/') === 0
+           || item_in(model.mimetype, this.EDIT_MIMETYPES)
+           || json_or_xml_container_mimetype(model.mimetype))
+        || includes_extension(model.path, NotebookList.editable_extensions);
     };
-
-    NotebookList.prototype._is_notebook = function(filepath){
-      return filepath_of_extension(filepath, NotebookList.ipynb_extensions)
+    
+    NotebookList.prototype._is_viewable = function(model) {
+      return model.mimetype === 'text/html' 
+        || includes_extension(model.path, NotebookList.viewable_extensions);
     };
 
     /**
@@ -650,9 +654,7 @@ define([
         // If it's not editable or unknown, the default action should be view
         // already so no need to show the button.
         // That should include things like, html, py, txt, json....
-        if (selected.length == 1 && !has_directory && selected.every(function(el) {
-            return that._is_editable(el.path) && ! that._is_notebook(el.path);
-        })) {
+        if (selected.length >= 1 && !has_directory) {
             $('.view-button').css('display', 'inline-block');
         } else {
             $('.view-button').css('display', 'none');
@@ -665,10 +667,8 @@ define([
         // Indeed if it's editable the default action is already to edit.
         // And non editable files should not show edit button.
         // for unknown we'll assume users know what they are doing.
-        if (selected.length == 1 && !has_directory && selected.find(function(el) {
-            return !that._is_editable(el.path)
-                && !that._is_not_editable(el.path)
-                && !that._is_notebook(el.path);
+        if (selected.length >= 1 && !has_directory && selected.every(function(el) {
+            return that._is_editable(el);
         })) {
             $('.edit-button').css('display', 'inline-block');
         } else {
@@ -703,6 +703,7 @@ define([
             select_all.data('indeterminate', true);
         }
         // Update total counter
+        checked = bidi.applyBidi(checked);
         $('#counter-select-all').html(checked===0 ? '&nbsp;' : checked);
 
         // If at aleast on item is selected, hide the selection instructions.
@@ -714,25 +715,32 @@ define([
     };
 
     NotebookList.prototype.add_link = function (model, item) {
-        var path = model.path,
-            name = model.name,
-            modified = model.last_modified;
-        var running = (model.type === 'notebook' && this.sessions[path] !== undefined);
-
-        item.data('name', name);
-        item.data('path', path);
-        item.data('modified', modified);
+        var running = (model.type === 'notebook' && this.sessions[model.path] !== undefined);
+        item.data('name',model.name);
+        item.data('path', model.path);
+        item.data('modified', model.last_modified);
         item.data('type', model.type);
-        item.find(".item_name").text(name);
+        item.find(".item_name").text(bidi.applyBidi(model.name));
         var icon = NotebookList.icons[model.type];
         if (running) {
             icon = 'running_' + icon;
         }
         var uri_prefix = NotebookList.uri_prefixes[model.type];
-        if (model.type === 'file'
-            && !this._is_editable(path))
+        if (model.type === 'file' && !this._is_editable(model))
+        {
+            uri_prefix = 'files';
+        }
+        if (model.type === 'file' && this._is_viewable(model))
         {
             uri_prefix = 'view';
+        }
+        if (model.type === 'file' && this._is_editable(model))
+        {
+            uri_prefix = 'edit';
+        }
+        if (model.type === 'file' && this._is_notebook(model))
+        {
+            uri_prefix = 'notebooks';
         }
 
         item.find(".item_icon").addClass(icon).addClass('icon-fixed-width');
@@ -741,7 +749,7 @@ define([
                 utils.url_path_join(
                     this.base_url,
                     uri_prefix,
-                    utils.encode_uri_components(path)
+                    utils.encode_uri_components(model.path)
                 )
             );
 
@@ -752,10 +760,10 @@ define([
         if (model.type !== "directory") {
             link.attr('target',IPython._target);
         }
-
+        
         // Add in the date that the file was last modified
-        item.find(".item_modified").text(utils.format_datetime(modified));
-        item.find(".item_modified").attr("title", moment(modified).format("YYYY-MM-DD HH:mm"));
+        item.find(".item_modified").text(utils.format_datetime(model.last_modified));
+        item.find(".item_modified").attr("title", moment(model.last_modified).format("YYYY-MM-DD HH:mm"));
     };
 
 
@@ -827,14 +835,36 @@ define([
         var item_type = this.selected[0].type;
         var input = $('<input/>').attr('type','text').attr('size','25').addClass('form-control')
             .val(item_name);
+        var rename_msg = function (type) {
+        	switch(type) {
+        	case 'file': return i18n.msg._("Enter a new file name:");
+        	case 'directory': return i18n.msg._("Enter a new directory name:");
+        	case 'notebook': return i18n.msg._("Enter a new notebook name:");
+        	default: return i18n.msg._("Enter a new name:");
+        	}
+        }
+        var rename_title = function (type) {
+           	switch(type) {
+           	case 'file': return i18n.msg._("Rename file");
+           	case 'directory': return i18n.msg._("Rename directory");
+           	case 'notebook': return i18n.msg._("Rename notebook");
+           	default: return i18n.msg._("Rename");
+           	}
+        }
         var dialog_body = $('<div/>').append(
             $("<p/>").addClass("rename-message")
-                .text('Enter a new '+ item_type + ' name:')
+                .text(rename_msg(item_type))
         ).append(
             $("<br/>")
         ).append(input);
+        
+        // This statement is used simply so that message extraction
+        // will pick up the strings.  The actual setting of the text
+        // for the button is in dialog.js.
+        var button_labels = [ i18n.msg._("Cancel"), i18n.msg._("Rename"), i18n.msg._("OK"), i18n.msg._("Move")];
+
         var d = dialog.modal({
-            title : "Rename "+ item_type,
+            title : rename_title(item_type),
             body : dialog_body,
             default_button: "Cancel",
             buttons : {
@@ -847,10 +877,12 @@ define([
                             // Deselect items after successful rename.
                             that.select('select-none');
                         }).catch(function(e) {
+                        	var template = i18n.msg._("An error occurred while renaming \"%1$s\" to \"%2$s\".");
+                        	var failmsg = i18n.msg.sprintf(template,item_name,input.val());
                             dialog.modal({
-                                title: "Rename Failed",
+                                title: i18n.msg._("Rename Failed"),
                                 body: $('<div/>')
-                                    .text("An error occurred while renaming \"" + item_name + "\" to \"" + input.val() + "\".")
+                                    .text(failmsg)
                                     .append($('<div/>')
                                         .addClass('alert alert-danger')
                                         .text(e.message || e)),
@@ -897,7 +929,8 @@ define([
             .val(utils.url_path_join('/', that.notebook_path));
         var dialog_body = $('<div/>').append(
             $("<p/>").addClass("rename-message")
-                .text('Enter new destination directory path for '+ num_items + ' items:')
+                .text(i18n.msg.sprintf(i18n.msg.ngettext("Enter a new destination directory path for this item:",
+                					"Enter a new destination directory path for these %d items:", num_items),num_items))
         ).append(
             $("<br/>")
         ).append(
@@ -909,7 +942,7 @@ define([
             ).addClass("move-path")
         );
         var d = dialog.modal({
-            title : "Move "+ num_items + " Items",
+            title : i18n.msg.sprintf(i18n.msg.ngettext("Move an Item","Move %d Items",num_items),num_items),
             body : dialog_body,
             default_button: "Cancel",
             buttons : {
@@ -928,10 +961,11 @@ define([
                                 that.load_list();
                             }).catch(function(e) {
                                 // If any of the moves fails, show this dialog for that move.
+                            	var failmsg = i18n.msg._("An error occurred while moving \"%1$s\" from \"%2$s\" to \"%3$s\".");
                                 dialog.modal({
-                                    title: "Move Failed",
+                                    title: i18n.msg._("Move Failed"),
                                     body: $('<div/>')
-                                        .text("An error occurred while moving \"" + item_name + "\" from \"" + item_path + "\" to \"" + new_path + "\".")
+                                        .text(i18n.msg.sprintf(failmsg,item_name,item_path,new_path))
                                         .append($('<div/>')
                                             .addClass('alert alert-danger')
                                             .text(e.message || e)),
@@ -974,17 +1008,20 @@ define([
     };
 
     NotebookList.prototype.delete_selected = function() {
-        var message;
         var selected = this.selected.slice(); // Don't let that.selected change out from under us
+        var template = i18n.msg.ngettext("Are you sure you want to permanently delete: \"%s\"?",
+        						"Are you sure you want to permanently delete the %d files or folders selected?",
+        						selected.length);
+        var delete_msg;
         if (selected.length === 1) {
-            message = 'Are you sure you want to permanently delete: ' + selected[0].name + '?';
+            delete_msg = i18n.msg.sprintf(template, selected[0].name);
         } else {
-            message = 'Are you sure you want to permanently delete the ' + selected.length + ' files/folders selected?';
+            delete_msg = i18n.msg.sprintf(template, selected.length);
         }
         var that = this;
         dialog.modal({
-            title : "Delete",
-            body : message,
+            title : i18n.msg._("Delete"),
+            body : delete_msg,
             default_button: "Cancel",
             buttons : {
                 Cancel: {},
@@ -1000,10 +1037,11 @@ define([
                             that.contents.delete(item.path).then(function() {
                                     that.notebook_deleted(item.path);
                             }).catch(function(e) {
+                            	var failmsg = i18n.msg._("An error occurred while deleting \"%s\".");
                                 dialog.modal({
-                                    title: "Delete Failed",
+                                    title: i18n.msg._("Delete Failed"),
                                     body: $('<div/>')
-                                        .text("An error occurred while deleting \"" + item.path + "\".")
+                                        .text(i18n.msg.sprintf(failmsg, item.path))
                                         .append($('<div/>')
                                             .addClass('alert alert-danger')
                                             .text(e.message || e)),
@@ -1024,8 +1062,7 @@ define([
         var that = this;
         that.selected.forEach(function(item) {
             var item_path = utils.encode_uri_components(item.path);
-            // Handle HTML files differently
-            var item_type = item_path.endsWith('.html') ? 'view' : 'files';
+            var item_type = that._is_notebook(item) ? 'notebooks' : that._is_viewable(item) ? 'view' : 'files';
             window.open(utils.url_path_join(that.base_url, item_type, item_path), IPython._target);
       	});
     };
@@ -1034,24 +1071,24 @@ define([
         var that = this;
         that.selected.forEach(function(item) {
             var item_path = utils.encode_uri_components(item.path);
-            // Handle ipynb files differently
-            var item_type = item_path.endsWith('.ipynb') ? 'notebooks' : 'edit';
-            window.open(utils.url_path_join(that.base_url, item_type, utils.encode_uri_components(item_path)), IPython._target);
+            window.open(utils.url_path_join(that.base_url, 'edit', item_path), IPython._target);
       	});
     };
 
     NotebookList.prototype.duplicate_selected = function() {
-        var message;
         var selected = this.selected.slice(); // Don't let that.selected change out from under us
+    	var template = i18n.msg.ngettext("Are you sure you want to duplicate: \"%s\"?",
+				"Are you sure you want to duplicate the %d files selected?",selected.length);
+    	var dup_msg;
         if (selected.length === 1) {
-            message = 'Are you sure you want to duplicate: ' + selected[0].name + '?';
+            dup_msg = i18n.msg.sprintf(template,selected[0].name);
         } else {
-            message = 'Are you sure you want to duplicate the ' + selected.length + ' files selected?';
+            dup_msg = i18n.msg.sprintf(template,selected.length);
         }
         var that = this;
         dialog.modal({
-            title : "Duplicate",
-            body : message,
+            title : i18n.msg._("Duplicate"),
+            body : dup_msg,
             default_button: "Cancel",
             buttons : {
                 Cancel: {},
@@ -1064,10 +1101,11 @@ define([
                                 // Deselect items after successful duplication.
                                 that.select('select-none');
                             }).catch(function(e) {
+                            	var failmsg = i18n.msg._("An error occurred while duplicating \"%s\".");
                                 dialog.modal({
-                                    title: "Duplicate Failed",
+                                    title: i18n.msg._("Duplicate Failed"),
                                     body: $('<div/>')
-                                        .text("An error occurred while duplicating \"" + item.path + "\".")
+                                        .text(i18n.msg.sprintf(failmsg,item.path))
                                         .append($('<div/>')
                                             .addClass('alert alert-danger')
                                             .text(e.message || e)),
@@ -1139,6 +1177,7 @@ define([
                 var add_uploading_button = function (f, item) {
                     // change buttons, add a progress bar
                     var uploading_button = item.find('.upload_button').text("Uploading");
+                    uploading_button.off('click');  // Prevent double upload
                     var progress_bar = $('<span/>')
                         .addClass('progress-bar')
                         .css('top', '0')
@@ -1284,7 +1323,7 @@ define([
 
     NotebookList.prototype.add_upload_button = function (item) {
         var that = this;
-        var upload_button = $('<button/>').text("Upload")
+        var upload_button = $('<button/>').text(i18n.msg._("Upload"))
             .addClass('btn btn-primary btn-xs upload_button')
             .click(function (e) {
                 var filename = item.find('.item_name > input').val();
@@ -1293,8 +1332,8 @@ define([
                 var format = 'text';
                 if (filename.length === 0 || filename[0] === '.') {
                     dialog.modal({
-                        title : 'Invalid file name',
-                        body : "File names must be at least one character and not start with a dot",
+                        title : i18n.msg._('Invalid file name'),
+                        body : i18n.msg._("File names must be at least one character and not start with a period"),
                         buttons : {'OK' : { 'class' : 'btn-primary' }}
                     });
                     return false;
@@ -1321,9 +1360,10 @@ define([
                     try {
                         model.content = JSON.parse(filedata);
                     } catch (e) {
+                    	var failbody = i18n.msg._("The error was: %s");
                         dialog.modal({
-                            title : 'Cannot upload invalid Notebook',
-                            body : "The error was: " + e,
+                            title : i18n.msg._('Cannot upload invalid Notebook'),
+                            body : i18n.msg.sprintf(failbody,e),
                             buttons : {'OK' : {
                                 'class' : 'btn-primary',
                                 click: function () {
@@ -1355,9 +1395,10 @@ define([
                 });
 
                 if (exists) {
+                	var body = i18n.msg._("There is already a file named \"%s\". Do you want to replace it?");
                     dialog.modal({
-                        title : "Replace file",
-                        body : 'There is already a file named ' + filename + ', do you want to replace it?',
+                        title : i18n.msg._("Replace file"),
+                        body : i18n.msg.sprintf(body,filename),
                         default_button: "Cancel",
                         buttons : {
                             Cancel : {
@@ -1377,7 +1418,7 @@ define([
 
                 return false;
             });
-        var cancel_button = $('<button/>').text("Cancel")
+        var cancel_button = $('<button/>').text(i18n.msg._("Cancel"))
             .addClass("btn btn-default btn-xs")
             .click(function (e) {
                 item.remove();

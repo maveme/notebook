@@ -5,10 +5,13 @@
 
 import functools
 import json
+import mimetypes
 import os
 import re
 import sys
 import traceback
+import types
+import warnings
 try:
     # py3
     from http.client import responses
@@ -61,20 +64,24 @@ class AuthenticatedHandler(web.RequestHandler):
         
         Can be overridden by defining Content-Security-Policy in settings['headers']
         """
+        if 'Content-Security-Policy' in self.settings.get('headers', {}):
+            # user-specified, don't override
+            return self.settings['headers']['Content-Security-Policy']
+
         return '; '.join([
             "frame-ancestors 'self'",
             # Make sure the report-uri is relative to the base_url
-            "report-uri " + url_path_join(self.base_url, csp_report_uri),
+            "report-uri " + self.settings.get('csp_report_uri', url_path_join(self.base_url, csp_report_uri)),
         ])
 
     def set_default_headers(self):
-        headers = self.settings.get('headers', {})
+        headers = {}
+        headers.update(self.settings.get('headers', {}))
 
-        if "Content-Security-Policy" not in headers:
-            headers["Content-Security-Policy"] = self.content_security_policy
+        headers["Content-Security-Policy"] = self.content_security_policy
 
         # Allow for overriding headers
-        for header_name,value in headers.items() :
+        for header_name, value in headers.items():
             try:
                 self.set_header(header_name, value)
             except Exception as e:
@@ -274,6 +281,20 @@ class IPythonHandler(AuthenticatedHandler):
         if self.allow_credentials:
             self.set_header("Access-Control-Allow-Credentials", 'true')
     
+    def set_attachment_header(self, filename):
+        """Set Content-Disposition: attachment header
+
+        As a method to ensure handling of filename encoding
+        """
+        escaped_filename = url_escape(filename)
+        self.set_header('Content-Disposition',
+            'attachment;'
+            " filename*=utf-8''{utf8}"
+            .format(
+                utf8=escaped_filename,
+            )
+        )
+
     def get_origin(self):
         # Handle WebSocket Origin naming convention differences
         # The difference between version 8 and 13 is that in 8 the
@@ -431,6 +452,34 @@ class APIHandler(IPythonHandler):
             raise web.HTTPError(404)
         return super(APIHandler, self).prepare()
 
+    def write_error(self, status_code, **kwargs):
+        """APIHandler errors are JSON, not human pages"""
+        self.set_header('Content-Type', 'application/json')
+        message = responses.get(status_code, 'Unknown HTTP Error')
+        reply = {
+            'message': message,
+        }
+        exc_info = kwargs.get('exc_info')
+        if exc_info:
+            e = exc_info[1]
+            if isinstance(e, HTTPError):
+                reply['message'] = e.log_message or message
+            else:
+                reply['message'] = 'Unhandled error'
+                reply['traceback'] = ''.join(traceback.format_exception(*exc_info))
+        self.log.warning(reply['message'])
+        self.finish(json.dumps(reply))
+
+    def get_current_user(self):
+        """Raise 403 on API handlers instead of redirecting to human login page"""
+        # preserve _user_cache so we don't raise more than once
+        if hasattr(self, '_user_cache'):
+            return self._user_cache
+        self._user_cache = user = super(APIHandler, self).get_current_user()
+        if user is None:
+            raise web.HTTPError(403)
+        return user
+
     @property
     def content_security_policy(self):
         csp = '; '.join([
@@ -471,13 +520,27 @@ class AuthenticatedFileHandler(IPythonHandler, web.StaticFileHandler):
 
     @web.authenticated
     def get(self, path):
-        if os.path.splitext(path)[1] == '.ipynb':
+        if os.path.splitext(path)[1] == '.ipynb' or self.get_argument("download", False):
             name = path.rsplit('/', 1)[-1]
-            self.set_header('Content-Type', 'application/json')
-            self.set_header('Content-Disposition','attachment; filename="%s"' % escape.url_escape(name))
-        
+            self.set_attachment_header(name)
+
         return web.StaticFileHandler.get(self, path)
     
+    def get_content_type(self):
+        path = self.absolute_path.strip('/')
+        if '/' in path:
+            _, name = path.rsplit('/', 1)
+        else:
+            name = path
+        if name.endswith('.ipynb'):
+            return 'application/x-ipynb+json'
+        else:
+            cur_mime = mimetypes.guess_type(name)[0]
+            if cur_mime == 'text/plain':
+                return 'text/plain; charset=UTF-8'
+            else:
+                return super(AuthenticatedFileHandler, self).get_content_type()
+
     def set_headers(self):
         super(AuthenticatedFileHandler, self).set_headers()
         # disable browser caching, rely on 304 replies for savings
@@ -514,32 +577,14 @@ def json_errors(method):
     2. Create and return a JSON body with a message field describing
        the error in a human readable form.
     """
+    warnings.warn('@json_errors is deprecated in notebook 5.2.0. Subclass APIHandler instead.',
+        DeprecationWarning,
+        stacklevel=2,
+    )
     @functools.wraps(method)
-    @gen.coroutine
     def wrapper(self, *args, **kwargs):
-        try:
-            result = yield gen.maybe_future(method(self, *args, **kwargs))
-        except web.HTTPError as e:
-            self.set_header('Content-Type', 'application/json')
-            status = e.status_code
-            message = e.log_message
-            self.log.warning(message)
-            self.set_status(e.status_code)
-            reply = dict(message=message, reason=e.reason)
-            self.finish(json.dumps(reply))
-        except Exception:
-            self.set_header('Content-Type', 'application/json')
-            self.log.error("Unhandled error in API request", exc_info=True)
-            status = 500
-            message = "Unknown server error"
-            t, value, tb = sys.exc_info()
-            self.set_status(status)
-            tb_text = ''.join(traceback.format_exception(t, value, tb))
-            reply = dict(message=message, reason=None, traceback=tb_text)
-            self.finish(json.dumps(reply))
-        else:
-            # FIXME: can use regular return in generators in py3
-            raise gen.Return(result)
+        self.write_error = types.MethodType(APIHandler.write_error, self)
+        return method(self, *args, **kwargs)
     return wrapper
 
 
@@ -610,7 +655,6 @@ class FileFindHandler(IPythonHandler, web.StaticFileHandler):
 
 class APIVersionHandler(APIHandler):
 
-    @json_errors
     def get(self):
         # not authenticated, so give as few info as possible
         self.finish(json.dumps({"version":notebook.__version__}))
@@ -689,5 +733,6 @@ path_regex = r"(?P<path>(?:(?:/[^/]+)+|/?))"
 
 default_handlers = [
     (r".*/", TrailingSlashHandler),
-    (r"api", APIVersionHandler)
+    (r"api", APIVersionHandler),
+    (r'/(robots\.txt|favicon\.ico)', web.StaticFileHandler),
 ]

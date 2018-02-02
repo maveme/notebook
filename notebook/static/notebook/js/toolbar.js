@@ -1,7 +1,7 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-define(['jquery', 'base/js/dialog','base/js/namespace'], function($, dialog, Jupyter) {
+define(['jquery','base/js/i18n', 'base/js/namespace'], function($, i18n, Jupyter) {
     "use strict";
 
     /**
@@ -94,12 +94,12 @@ define(['jquery', 'base/js/dialog','base/js/namespace'], function($, dialog, Jup
                 }
                 var button  = $('<button/>')
                     .addClass('btn btn-default')
-                    .attr("title", el.label||action.help)
+                    .attr("title", el.label||i18n.msg._(action.help))
                     .append(
                         $("<i/>").addClass(el.icon||(action||{icon:'fa-exclamation-triangle'}).icon).addClass('fa')
                     );
                 if (el.label) {
-                    var label = $('<span/>').text(el.label).addClass('toolbar-btn-label');
+                    var label = $('<span/>').text(i18n.msg._(el.label)).addClass('toolbar-btn-label');
                     button.append(label);
                 }
                 var id = el.id;

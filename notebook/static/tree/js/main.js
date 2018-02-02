@@ -26,6 +26,7 @@ require([
     'base/js/namespace',
     'base/js/dialog',
     'base/js/events',
+    'base/js/promises',
     'base/js/page',
     'base/js/utils',
     'services/config',
@@ -35,12 +36,14 @@ require([
     'tree/js/terminallist',
     'tree/js/newnotebook',
     'auth/js/loginwidget',
+    'bidi/bidi',
 ], function(
     $,
     contents_service,
     IPython,
     dialog,
     events,
+    promises,
     page,
     utils,
     config,
@@ -49,10 +52,13 @@ require([
     kernellist,
     terminallist,
     newnotebook,
-    loginwidget){
+    loginwidget,
+    bidi){
     "use strict";
+    
     try{
         requirejs(['custom/custom'], function() {});
+        bidi.loadLocale();
     } catch(err) {
         console.log("Error loading custom.js from tree service. Continuing and logging");
         console.warn(err);

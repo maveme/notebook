@@ -14,7 +14,7 @@ from notebook.utils import url_path_join, url_escape
 from jupyter_client.jsonutil import date_default
 
 from notebook.base.handlers import (
-    IPythonHandler, APIHandler, json_errors, path_regex,
+    IPythonHandler, APIHandler, path_regex,
 )
 
 
@@ -87,7 +87,6 @@ class ContentsHandler(APIHandler):
         self.set_header('Content-Type', 'application/json')
         self.finish(json.dumps(model, default=date_default))
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def get(self, path=''):
@@ -115,7 +114,6 @@ class ContentsHandler(APIHandler):
         validate_model(model, expect_content=content)
         self._finish_model(model, location=False)
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def patch(self, path=''):
@@ -168,7 +166,6 @@ class ContentsHandler(APIHandler):
         validate_model(model, expect_content=False)
         self._finish_model(model)
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def post(self, path=''):
@@ -204,7 +201,6 @@ class ContentsHandler(APIHandler):
         else:
             yield self._new_untitled(path)
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def put(self, path=''):
@@ -230,7 +226,6 @@ class ContentsHandler(APIHandler):
         else:
             yield gen.maybe_future(self._new_untitled(path))
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def delete(self, path=''):
@@ -244,7 +239,6 @@ class ContentsHandler(APIHandler):
 
 class CheckpointsHandler(APIHandler):
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def get(self, path=''):
@@ -254,7 +248,6 @@ class CheckpointsHandler(APIHandler):
         data = json.dumps(checkpoints, default=date_default)
         self.finish(data)
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def post(self, path=''):
@@ -271,7 +264,6 @@ class CheckpointsHandler(APIHandler):
 
 class ModifyCheckpointsHandler(APIHandler):
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def post(self, path, checkpoint_id):
@@ -281,7 +273,6 @@ class ModifyCheckpointsHandler(APIHandler):
         self.set_status(204)
         self.finish()
 
-    @json_errors
     @web.authenticated
     @gen.coroutine
     def delete(self, path, checkpoint_id):
@@ -307,6 +298,16 @@ class NotebooksRedirectHandler(IPythonHandler):
     put = patch = post = delete = get
 
 
+class TrustNotebooksHandler(IPythonHandler):
+    """ Handles trust/signing of notebooks """
+
+    @web.authenticated
+    @gen.coroutine
+    def post(self,path=''):
+        cm = self.contents_manager
+        yield gen.maybe_future(cm.trust_notebook(path))
+        self.set_status(201)
+        self.finish()
 #-----------------------------------------------------------------------------
 # URL to handler mappings
 #-----------------------------------------------------------------------------
@@ -318,6 +319,7 @@ default_handlers = [
     (r"/api/contents%s/checkpoints" % path_regex, CheckpointsHandler),
     (r"/api/contents%s/checkpoints/%s" % (path_regex, _checkpoint_id_regex),
         ModifyCheckpointsHandler),
+    (r"/api/contents%s/trust" % path_regex, TrustNotebooksHandler),
     (r"/api/contents%s" % path_regex, ContentsHandler),
     (r"/api/notebooks/?(.*)", NotebooksRedirectHandler),
 ]

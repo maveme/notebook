@@ -4,6 +4,7 @@
 define([
     'jquery',
     'base/js/utils',
+    'base/js/i18n',
     'notebook/js/cell',
     'base/js/security',
     'services/config',
@@ -16,6 +17,7 @@ define([
 ], function(
     $,
     utils,
+    i18n,
     cell,
     security,
     configmod,
@@ -391,7 +393,15 @@ define([
             var text_and_math = mathjaxutils.remove_math(text);
             text = text_and_math[0];
             math = text_and_math[1];
-            marked(text, function (err, html) {
+            // Prevent marked from returning inline styles for table cells
+            var renderer = new marked.Renderer();
+            renderer.tablecell = function (content, flags) {
+              var type = flags.header ? 'th' : 'td';
+              var start_tag = '<' + type + '>';
+              var end_tag = '</' + type + '>\n';
+              return start_tag + content + end_tag;
+            };
+            marked(text, { renderer: renderer }, function (err, html) {
                 html = mathjaxutils.replace_math(html, math);
                 html = security.sanitize_html(html);
                 html = $($.parseHTML(html));
@@ -546,9 +556,9 @@ define([
         highlight_modes : {
             'diff'         :{'reg':[/^diff/]}
         },
-        placeholder : "Write raw LaTeX or other formats here, for use with nbconvert. " +
+        placeholder : i18n.msg._("Write raw LaTeX or other formats here, for use with nbconvert. " +
             "It will not be rendered in the notebook. " +
-            "When passing through nbconvert, a Raw Cell's content is added to the output unmodified.",
+            "When passing through nbconvert, a Raw Cell's content is added to the output unmodified."),
     };
 
     RawCell.prototype = Object.create(TextCell.prototype);

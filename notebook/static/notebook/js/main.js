@@ -29,9 +29,11 @@ require([
     'base/js/utils',
     'base/js/page',
     'base/js/events',
+    'base/js/promises',
     'auth/js/loginwidget',
     'notebook/js/maintoolbar',
     'notebook/js/pager',
+    'notebook/js/promises',
     'notebook/js/quickhelp',
     'notebook/js/menubar',
     'notebook/js/notificationarea',
@@ -43,7 +45,9 @@ require([
     'notebook/js/about',
     'notebook/js/searchandreplace',
     'notebook/js/clipboard',
-    'components/mixpanel/build/mixpanel.amd'
+    'bidi/bidi',
+    'components/mixpanel/build/mixpanel.amd',
+    'components/d3/d3'
 ], function(
     $,
     contents_service,
@@ -53,9 +57,11 @@ require([
     utils,
     page,
     events,
+    promises,
     loginwidget,
     maintoolbar,
     pager,
+    nb_promises,
     quickhelp,
     menubar,
     notificationarea,
@@ -67,7 +73,9 @@ require([
     about,
     searchandreplace,
     clipboard,
-    mixpanel
+    bidi,
+    mixpanel,
+    d3
     ) {
     "use strict";
 
@@ -80,9 +88,10 @@ require([
 
     // Pull typeahead from the global jquery object
     var typeahead = $.typeahead;
-    
+
     try{
-        requirejs(['custom/custom'], function() {});
+        requirejs(['custom/custom', d3], function() {});
+        bidi.loadLocale();
     } catch(err) {
         console.log("Error processing custom.js. Logging and continuing");
         console.warn(err);
@@ -92,7 +101,6 @@ require([
     window.CodeMirror = CodeMirror;
 
     // Setup all of the config related things
-    
 
     var common_options = {
         ws_url : utils.get_body_data("wsUrl"),
@@ -107,7 +115,7 @@ require([
     common_config.load();
 
     // Instantiate the main objects
-    
+
     var page = new page.Page('div#header', 'div#site');
     var pager = new pager.Pager('div#pager', {
         events: events});
@@ -115,7 +123,7 @@ require([
     var keyboard_manager = new keyboardmanager.KeyboardManager({
         pager: pager,
         events: events,
-        actions: acts, 
+        actions: acts,
         config: config_section,
     });
     var save_widget = new savewidget.SaveWidget('span#save_widget', {
@@ -215,7 +223,7 @@ require([
     });
 
     clipboard.setup_clipboard_events();
-    
+
     // Now actually load nbextensionsload_extensions_from_config
     Promise.all([
         utils.load_extensions_from_config(config_section),

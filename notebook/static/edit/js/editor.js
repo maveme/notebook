@@ -76,12 +76,18 @@ function(
     // default CodeMirror options
     Editor.default_codemirror_options = {
         extraKeys: {
-            "Tab" :  "indentMore",
+            "Cmd-Right": "goLineRight",
+            "End": "goLineRight",
+            "Cmd-Left": "goLineLeft",
+            "Tab": "indentMore",
+            "Shift-Tab" : "indentLess",
+            "Cmd-/" : "toggleComment",
+            "Ctrl-/" : "toggleComment",
         },
         indentUnit: 4,
         theme: "ipython",
         lineNumbers: true,
-        lineWrapping: true,
+        lineWrapping: true
     };
     
     Editor.prototype.load = function() {
@@ -150,8 +156,10 @@ function(
         /** set the codemirror mode from a modeinfo struct */
         var that = this;
         utils.requireCodeMirrorMode(modeinfo, function () {
-            that.codemirror.setOption('mode', modeinfo.mode);
+            that.codemirror.setOption('mode', modeinfo.mime);
             that.events.trigger("mode_changed.Editor", modeinfo);
+        }, function(err) {
+            console.log('Error getting CodeMirror mode: ' + err);
         });
     };
 
@@ -168,7 +176,7 @@ function(
             Editor: {
                 file_extension_modes: update_mode_map,
             }
-        })
+        });
     };
 
     Editor.prototype.get_filename = function () {

@@ -13,6 +13,7 @@ define([
     'jquery',
     'base/js/namespace',
     'base/js/utils',
+    'base/js/i18n',
     'base/js/keyboard',
     'services/config',
     'notebook/js/cell',
@@ -27,6 +28,7 @@ define([
     $,
     IPython,
     utils,
+    i18n,
     keyboard,
     configmod,
     cell,
@@ -309,12 +311,21 @@ define([
     CodeCell.prototype.execute = function (stop_on_error) {
         mixpanel.track('Execute code');
         if (!this.kernel) {
-            console.log("Can't execute cell since kernel is not set.");
+            console.log(i18n.msg._("Can't execute cell since kernel is not set."));
             return;
         }
 
         if (stop_on_error === undefined) {
-            stop_on_error = true;
+            if (this.metadata !== undefined && 
+                    this.metadata.tags !== undefined) {
+                if (this.metadata.tags.indexOf('raises-exception') !== -1) {
+                    stop_on_error = false;
+                } else {
+                    stop_on_error = true;
+                }
+            } else {
+               stop_on_error = true;
+            }
         }
 
         this.clear_output(false, true);
@@ -341,9 +352,9 @@ define([
         var that = this;
         function handleFinished(evt, data) {
             if (that.kernel.id === data.kernel.id && that.last_msg_id === data.msg_id) {
-            		that.events.trigger('finished_execute.CodeCell', {cell: that});
+                    that.events.trigger('finished_execute.CodeCell', {cell: that});
                 that.events.off('finished_iopub.Kernel', handleFinished);
-      	    }
+              }
         }
         this.events.on('finished_iopub.Kernel', handleFinished);
     };
@@ -471,7 +482,7 @@ define([
         } else {
             ns = encodeURIComponent(prompt_value);
         }
-        return '<bdi>In</bdi>&nbsp;[' + ns + ']:';
+        return '<bdi>'+i18n.msg._('In')+'</bdi>&nbsp;[' + ns + ']:';
     };
 
     CodeCell.input_prompt_continuation = function (prompt_value, lines_number) {

@@ -38,8 +38,7 @@ def respond_zip(handler, name, output, resources):
 
     # Headers
     zip_filename = os.path.splitext(name)[0] + '.zip'
-    handler.set_header('Content-Disposition',
-                       'attachment; filename="%s"' % escape.url_escape(zip_filename))
+    handler.set_attachment_header(zip_filename)
     handler.set_header('Content-Type', 'application/zip')
 
     # Prepare the zip file
@@ -58,12 +57,12 @@ def get_exporter(format, **kwargs):
     """get an exporter, raising appropriate errors"""
     # if this fails, will raise 500
     try:
-        from nbconvert.exporters.export import exporter_map
+        from nbconvert.exporters.base import get_exporter
     except ImportError as e:
         raise web.HTTPError(500, "Could not import nbconvert: %s" % e)
     
     try:
-        Exporter = exporter_map[format]
+        Exporter = get_exporter(format)
     except KeyError:
         # should this be 400?
         raise web.HTTPError(404, u"No exporter for format: %s" % format)
@@ -114,8 +113,7 @@ class NbconvertFileHandler(IPythonHandler):
         # Force download if requested
         if self.get_argument('download', 'false').lower() == 'true':
             filename = os.path.splitext(name)[0] + resources['output_extension']
-            self.set_header('Content-Disposition',
-                               'attachment; filename="%s"' % escape.url_escape(filename))
+            self.set_attachment_header(filename)
 
         # MIME type
         if exporter.output_mimetype:

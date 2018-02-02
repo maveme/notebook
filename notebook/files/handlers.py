@@ -26,6 +26,13 @@ class FilesHandler(IPythonHandler):
     @web.authenticated
     def get(self, path, include_body=True):
         cm = self.contents_manager
+
+        if cm.files_handler_class:
+            return cm.files_handler_class(self.application, self.request, path=cm.root_dir)._execute(
+                [t(self.request) for t in self.application.transforms],
+                path
+            )
+
         if cm.is_hidden(path):
             self.log.info("Refusing to serve hidden file, via 404 Error")
             raise web.HTTPError(404)
@@ -39,7 +46,7 @@ class FilesHandler(IPythonHandler):
         model = cm.get(path, type='file', content=include_body)
         
         if self.get_argument("download", False):
-            self.set_header('Content-Disposition','attachment; filename="%s"' % escape.url_escape(name))
+            self.set_attachment_header(name)
         
         # get mimetype from filename
         if name.endswith('.ipynb'):
