@@ -11,12 +11,12 @@ import sys
 
 from jupyter_core.paths import jupyter_config_path
 from ._version import __version__
+from .config_manager import BaseJSONConfigManager
 from .extensions import (
     BaseExtensionApp, _get_config_dir, GREEN_ENABLED, RED_DISABLED, GREEN_OK, RED_X
 )
 from traitlets import Bool
 from traitlets.utils.importstring import import_item
-from traitlets.config.manager import BaseJSONConfigManager
 
 
 # ------------------------------------------------------------------------------
@@ -283,8 +283,8 @@ class ServerExtensionApp(BaseExtensionApp):
     examples = _examples
 
     subcommands = dict(
-        enable=(EnableServerExtensionApp, "Enable an server extension"),
-        disable=(DisableServerExtensionApp, "Disable an server extension"),
+        enable=(EnableServerExtensionApp, "Enable a server extension"),
+        disable=(DisableServerExtensionApp, "Disable a server extension"),
         list=(ListServerExtensionsApp, "List server extensions")
     )
 

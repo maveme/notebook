@@ -3,21 +3,24 @@
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
-
+from datetime import datetime
 import errno
 import io
 import os
 import shutil
 import stat
+import sys
 import warnings
 import mimetypes
 import nbformat
 
+from send2trash import send2trash
 from tornado import web
 
 from .filecheckpoints import FileCheckpoints
 from .fileio import FileManagerMixin
 from .manager import ContentsManager
+from ...utils import exists
 
 from ipython_genutils.importstring import import_item
 from traitlets import Any, Unicode, Bool, TraitError, observe, default, validate
@@ -28,6 +31,7 @@ from notebook.utils import (
     is_hidden, is_file_hidden,
     to_api_path,
 )
+from notebook.base.handlers import AuthenticatedFileHandler
 
 try:
     from os.path import samefile
@@ -74,9 +78,10 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
             return getcwd()
 
     save_script = Bool(False, config=True, help='DEPRECATED, use post_save_hook. Will be removed in Notebook 5.0')
-
     @observe('save_script')
-    def _update_save_script(self):
+    def _update_save_script(self, change):
+        if not change['new']:
+            return
         self.log.warning("""
         `--script` is deprecated and will be removed in notebook 5.0.
 
@@ -145,6 +150,19 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
     @default('checkpoints_class')
     def _checkpoints_class_default(self):
         return FileCheckpoints
+
+    delete_to_trash = Bool(True, config=True,
+        help="""If True (default), deleting files will send them to the
+        platform's trash/recycle bin, where they can be recovered. If False,
+        deleting files really deletes them.""")
+
+    @default('files_handler_class')
+    def _files_handler_class_default(self):
+        return AuthenticatedFileHandler
+
+    @default('files_handler_params')
+    def _files_handler_params_default(self):
+        return {'path': self.root_dir}
 
     def is_hidden(self, path):
         """Does the API style path correspond to a hidden directory or file?
@@ -220,14 +238,28 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
         """
         path = path.strip('/')
         os_path = self._get_os_path(path=path)
-        return os.path.exists(os_path)
+        return exists(os_path)
 
     def _base_model(self, path):
         """Build the common base of a contents model"""
         os_path = self._get_os_path(path)
-        info = os.stat(os_path)
-        last_modified = tz.utcfromtimestamp(info.st_mtime)
-        created = tz.utcfromtimestamp(info.st_ctime)
+        info = os.lstat(os_path)
+        try:
+            last_modified = tz.utcfromtimestamp(info.st_mtime)
+        except (ValueError, OSError):
+            # Files can rarely have an invalid timestamp
+            # https://github.com/jupyter/notebook/issues/2539
+            # https://github.com/jupyter/notebook/issues/2757
+            # Use the Unix epoch as a fallback so we don't crash.
+            self.log.warning('Invalid mtime %s for %s', info.st_mtime, os_path)
+            last_modified = datetime(1970, 1, 1, 0, 0, tzinfo=tz.UTC)
+
+        try:
+            created = tz.utcfromtimestamp(info.st_ctime)
+        except (ValueError, OSError):  # See above
+            self.log.warning('Invalid ctime %s for %s', info.st_ctime, os_path)
+            created = datetime(1970, 1, 1, 0, 0, tzinfo=tz.UTC)
+
         # Create the base model.
         model = {}
         model['name'] = path.rsplit('/', 1)[-1]
@@ -255,7 +287,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
 
         if not os.path.isdir(os_path):
             raise web.HTTPError(404, four_o_four)
-        elif is_hidden(os_path, self.root_dir):
+        elif is_hidden(os_path, self.root_dir) and not self.allow_hidden:
             self.log.info("Refusing to serve hidden directory %r, via 404 Error",
                 os_path
             )
@@ -275,7 +307,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                     continue
 
                 try:
-                    st = os.stat(os_path)
+                    st = os.lstat(os_path)
                 except OSError as e:
                     # skip over broken symlinks in listing
                     if e.errno == errno.ENOENT:
@@ -284,7 +316,9 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
                         self.log.warning("Error stat-ing %s: %s", os_path, e)
                     continue
 
-                if not stat.S_ISREG(st.st_mode) and not stat.S_ISDIR(st.st_mode):
+                if (not stat.S_ISLNK(st.st_mode)
+                        and not stat.S_ISREG(st.st_mode)
+                        and not stat.S_ISDIR(st.st_mode)):
                     self.log.debug("%s not a regular file", os_path)
                     continue
 
@@ -391,7 +425,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
 
     def _save_directory(self, os_path, model, path=''):
         """create a directory"""
-        if is_hidden(os_path, self.root_dir):
+        if is_hidden(os_path, self.root_dir) and not self.allow_hidden:
             raise web.HTTPError(400, u'Cannot create hidden directory %r' % os_path)
         if not os.path.exists(os_path):
             with self.perm_to_403():
@@ -454,19 +488,26 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
         path = path.strip('/')
         os_path = self._get_os_path(path)
         rm = os.unlink
+        if not os.path.exists(os_path):
+            raise web.HTTPError(404, u'File or directory does not exist: %s' % os_path)
+
+        if self.delete_to_trash:
+            self.log.debug("Sending %s to trash", os_path)
+            # Looking at the code in send2trash, I don't think the errors it
+            # raises let us distinguish permission errors from other errors in
+            # code. So for now, just let them all get logged as server errors.
+            send2trash(os_path)
+            return
+
         if os.path.isdir(os_path):
             listing = os.listdir(os_path)
-            # Don't delete non-empty directories.
+            # Don't permanently delete non-empty directories.
             # A directory containing only leftover checkpoints is
             # considered empty.
             cp_dir = getattr(self.checkpoints, 'checkpoint_dir', None)
             for entry in listing:
                 if entry != cp_dir:
                     raise web.HTTPError(400, u'Directory %s not empty' % os_path)
-        elif not os.path.isfile(os_path):
-            raise web.HTTPError(404, u'File does not exist: %s' % os_path)
-
-        if os.path.isdir(os_path):
             self.log.debug("Removing directory %s", os_path)
             with self.perm_to_403():
                 shutil.rmtree(os_path)
@@ -499,7 +540,7 @@ class FileContentsManager(FileManagerMixin, ContentsManager):
             raise web.HTTPError(500, u'Unknown error renaming file: %s %s' % (old_path, e))
 
     def info_string(self):
-        return "Serving notebooks from local directory: %s" % self.root_dir
+        return _("Serving notebooks from local directory: %s") % self.root_dir
 
     def get_kernel_path(self, path, model=None):
         """Return the initial API path of  a kernel associated with a given notebook"""

@@ -20,12 +20,13 @@ var bind = function bind(obj) {
 Function.prototype.bind = Function.prototype.bind || bind ;
 
 
-require([
+requirejs([
     'jquery',
     'contents',
     'base/js/namespace',
     'base/js/dialog',
     'base/js/events',
+    'base/js/promises',
     'base/js/page',
     'base/js/utils',
     'services/config',
@@ -35,12 +36,14 @@ require([
     'tree/js/terminallist',
     'tree/js/newnotebook',
     'auth/js/loginwidget',
+    'bidi/bidi',
 ], function(
     $,
     contents_service,
     IPython,
     dialog,
     events,
+    promises,
     page,
     utils,
     config,
@@ -49,10 +52,13 @@ require([
     kernellist,
     terminallist,
     newnotebook,
-    loginwidget){
+    loginwidget,
+    bidi){
     "use strict";
+    
     try{
         requirejs(['custom/custom'], function() {});
+        bidi.loadLocale();
     } catch(err) {
         console.log("Error loading custom.js from tree service. Continuing and logging");
         console.warn(err);
@@ -190,7 +196,7 @@ require([
         e.preventDefault();
 
         // Set the hash without causing the page to jump.
-        // http://stackoverflow.com/a/14690177/2824256
+        // https://stackoverflow.com/a/14690177/2824256
         var hash = $(this).attr("href");
         if(window.history.pushState) {
             window.history.pushState(null, null, hash);

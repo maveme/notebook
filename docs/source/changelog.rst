@@ -20,11 +20,218 @@ We strongly recommend that you upgrade to version 9+ of pip before upgrading ``n
     Use ``pip install pip --upgrade`` to upgrade pip. Check pip version with
     ``pip --version``.
 
+.. _release-5.4:
+
+5.4
+---
+
+- Fix creating files and folders after navigating directories in the dashboard
+  (:ghpull:`3264`).
+- Enable printing notebooks in colour, removing the CSS that made everything
+  black and white (:ghpull:`3212`).
+- Limit the completion options displayed in the notebook to 1000, to avoid
+  performance issues with very long lists (:ghpull:`3195`).
+- Accessibility improvements in ``tree.html`` (:ghpull:`3271`).
+- Added alt-text to the kernel logo image in the notebook UI (:ghpull:`3228`).
+- Added a test on Travis CI to flag if symlinks are accidentally introduced
+  in the future. This should prevent the issue that necessitated
+  :ref:`release-5.3.1` (:ghpull:`3227`).
+- Use lowercase letters for random IDs generated in our Javascript
+  (:ghpull:`3264`).
+- Removed duplicate code setting ``TextCell.notebook`` (:ghpull:`3256`).
+
+Thanks to the following contributors:
+
+- Alex Soderman (`asoderman <https://github.com/asoderman>`__)
+- Matthias Bussonnier (`Carreau <https://github.com/Carreau>`__)
+- Min RK (`minrk <https://github.com/minrk>`__)
+- Nitesh Sawant (`ns23 <https://github.com/ns23>`__)
+- Thomas Kluyver (`takluyver <https://github.com/takluyver>`__)
+- Yuvi Panda (`yuvipanda <https://github.com/yuvipanda>`__)
+
+See the 5.4 milestone on GitHub for a complete list of
+`pull requests <https://github.com/jupyter/notebook/pulls?utf8=%E2%9C%93&q=is%3Apr%20milestone%3A5.4>`__ involved in this release.
+
+.. _release-5.3.1:
+
+5.3.1
+-----
+
+Replaced a symlink in the repository with a copy, to fix issues installing
+on Windows (:ghpull:`3220`).
+
+.. _release-5.3.0:
+
+5.3.0
+-----
+
+This release introduces a couple noteable improvements, such as terminal support for Windows and support for OS trash (files deleted from the notebook dashboard are moved to the OS trash vs. deleted permanently).
+
+- Add support for terminals on windows (:ghpull:`3087`). 
+- Add a "restart and run all" button to the toolbar (:ghpull:`2965`). 
+- Send files to os trash mechanism on delete (:ghpull:`1968`). 
+- Allow programmatic copy to clipboard (:ghpull:`3088`). 
+- Use DOM History API for navigating between directories in the file browser (:ghpull:`3115`).
+- Add translated files to folder(docs-translations) (:ghpull:`3065`). 
+- Allow non empty dirs to be deleted (:ghpull:`3108`). 
+- Set cookie on base_url (:ghpull:`2959`). 
+- Allow token-authenticated requests cross-origin by default (:ghpull:`2920`). 
+- Change cull_idle_timeout_minimum to 1 from 300 (:ghpull:`2910`). 
+- Config option to shut down server after n seconds with no kernels (:ghpull:`2963`). 
+- Display a "close" button on load notebook error (:ghpull:`3176`). 
+- Add action to command pallette to run CodeMirror's "indentAuto" on selection (:ghpull:`3175`). 
+- Add option to specify extra services (:ghpull:`3158`). 
+- Warn_bad_name should not use global name (:ghpull:`3160`). 
+- Avoid overflow of hidden form (:ghpull:`3148`). 
+- Fix shutdown trans loss (:ghpull:`3147`). 
+- Find available kernelspecs more efficiently (:ghpull:`3136`). 
+- Don\'t try to translate missing help strings (:ghpull:`3122`). 
+- Frontend/extension-config: allow default json files in a .d directory (:ghpull:`3116`). 
+- Use `requirejs` vs. `require` (:ghpull:`3097`). 
+- Fixes some ui bugs in firefox #3044 (:ghpull:`3058`). 
+- Compare non-specific language code when choosing to use arabic numerals (:ghpull:`3055`). 
+- Fix save-script deprecation (:ghpull:`3053`). 
+- Include moment locales in package_data (:ghpull:`3051`). 
+- Fix moment locale loading in bidi support (:ghpull:`3048`). 
+- Tornado 5: periodiccallback loop arg will be removed (:ghpull:`3034`). 
+- Use `/files` prefix for pdf-like files (:ghpull:`3031`). 
+- Add folder for document translation (:ghpull:`3022`). 
+- When login-in via token, let a chance for user to set the password (:ghpull:`3008`). 
+- Switch to jupyter_core implementation of ensure_dir_exists (:ghpull:`3002`). 
+- Send http shutdown request on \'stop\' subcommand (:ghpull:`3000`). 
+- Work on loading ui translations  (:ghpull:`2969`). 
+- Fix ansi inverse (:ghpull:`2967`). 
+- Add send2trash to requirements for building docs (:ghpull:`2964`). 
+- I18n readme.md improvement (:ghpull:`2962`).  
+- Add \'reason\' field to json error responses (:ghpull:`2958`).
+- Add some padding for stream outputs (:ghpull:`3194`).
+- Always use setuptools in ``setup.py`` (:ghpull:`3206`).
+- Fix clearing cookies on logout when ``base_url`` is configured (:ghpull:`3207`).
+
+Thanks to the following contributors:
+
+- bacboc (`bacboc <https://github.com/bacboc>`__)
+- Steven Silvester (`blink1073 <https://github.com/blink1073>`__)
+- Matthias Bussonnier (`Carreau <https://github.com/Carreau>`__)
+- ChungJooHo (`ChungJooHo <https://github.com/ChungJooHo>`__)
+- edida (`edida <https://github.com/edida>`__)
+- Francesco Franchina (`ferdas <https://github.com/ferdas>`__)
+- forbxy (`forbxy <https://github.com/forbxy>`__)
+- Grant Nestor (`gnestor <https://github.com/gnestor>`__)
+- Josh Barnes (`jcb91 <https://github.com/jcb91>`__)
+- JocelynDelalande (`JocelynDelalande <https://github.com/JocelynDelalande>`__)
+- Karthik Balakrishnan (`karthikb351 <https://github.com/karthikb351>`__)
+- Kevin Bates (`kevin-bates <https://github.com/kevin-bates>`__)
+- Kirit Thadaka (`kirit93 <https://github.com/kirit93>`__)
+- Lilian Besson (`Naereen <https://github.com/Naereen>`__)
+- Maarten Breddels (`maartenbreddels <https://github.com/maartenbreddels>`__)
+- Madhu94 (`Madhu94 <https://github.com/Madhu94>`__)
+- Matthias Geier (`mgeier <https://github.com/mgeier>`__)
+- Michael Heilman (`mheilman <https://github.com/mheilman>`__)
+- Min RK (`minrk <https://github.com/minrk>`__)
+- PHaeJin (`PHaeJin <https://github.com/PHaeJin>`__)
+- Sukneet (`Sukneet <https://github.com/Sukneet>`__)
+- Thomas Kluyver (`takluyver <https://github.com/takluyver>`__)
+
+See the 5.3 milestone on GitHub for a complete list of
+`pull requests <https://github.com/jupyter/notebook/pulls?utf8=%E2%9C%93&q=is%3Apr%20milestone%3A5.3>`__ involved in this release.
+
+.. _release-5.2.1:
+
+5.2.1
+-----
+
+- Fix invisible CodeMirror cursor at specific browser zoom levels (:ghpull:`2983`). 
+- Fix nbconvert handler causing broken export to PDF (:ghpull:`2981`). 
+- Fix the prompt_area argument of the output area constructor. (:ghpull:`2961`). 
+- Handle a compound extension in new_untitled (:ghpull:`2949`). 
+- Allow disabling offline message buffering (:ghpull:`2916`). 
+
+Thanks to the following contributors:
+
+- Steven Silvester (`blink1073 <https://github.com/blink1073>`__)
+- Grant Nestor (`gnestor <https://github.com/gnestor>`__)
+- Jason Grout (`jasongrout <https://github.com/jasongrout>`__)
+- Min RK (`minrk <https://github.com/minrk>`__)
+- M Pacer (`mpacer <https://github.com/mpacer>`__)
+
+See the 5.2.1 milestone on GitHub for a complete list of
+`pull requests <https://github.com/jupyter/notebook/pulls?utf8=%E2%9C%93&q=is%3Apr%20milestone%3A5.2.1>`__ involved in this release.
+
+.. _release-5.2.0:
+
+5.2.0
+-----
+
+- Allow setting token via jupyter_token env (:ghpull:`2921`). 
+- Fix some errors caused by raising 403 in get_current_user (:ghpull:`2919`). 
+- Register contents_manager.files_handler_class directly (:ghpull:`2917`). 
+- Update viewable_extensions (:ghpull:`2913`). 
+- Show edit shortcuts modal after shortcuts modal is hidden (:ghpull:`2912`). 
+- Improve edit/view behavior (:ghpull:`2911`). 
+- The root directory of the notebook server should never be hidden (:ghpull:`2907`). 
+- Fix notebook require config to match tools/build-main (:ghpull:`2888`). 
+- Give page constructor default arguments (:ghpull:`2887`). 
+- Fix codemirror.less to match codemirror\'s expected padding layout (:ghpull:`2880`). 
+- Add x-xsrftoken to access-control-allow-headers (:ghpull:`2876`). 
+- Buffer messages when websocket connection is interrupted (:ghpull:`2871`). 
+- Load locale dynamically only when not en-us (:ghpull:`2866`). 
+- Changed key strength to 2048 bits (:ghpull:`2861`). 
+- Resync jsversion with python version (:ghpull:`2860`). 
+- Allow copy operation on modified, read-only notebook (:ghpull:`2854`). 
+- Update error handling on apihandlers (:ghpull:`2853`). 
+- Test python 3.6 on travis, drop 3.3 (:ghpull:`2852`). 
+- Avoid base64-literals in image tests (:ghpull:`2851`). 
+- Upgrade xterm.js to 2.9.2 (:ghpull:`2849`). 
+- Changed all python variables named file to file_name to not override built_in file (:ghpull:`2830`). 
+- Add more doc tests (:ghpull:`2823`). 
+- Typos fix (:ghpull:`2815`). 
+- Rename and update license [ci skip] (:ghpull:`2810`). 
+- Travis builds doc  (:ghpull:`2808`). 
+- Pull request i18n  (:ghpull:`2804`). 
+- Factor out output_prompt_function, as is done with input prompt (:ghpull:`2774`). 
+- Use rfc5987 encoding for filenames (:ghpull:`2767`). 
+- Added path to the resources metadata, the same as in from_filename(...) in nbconvert.exporters.py (:ghpull:`2753`). 
+- Make "extrakeys" consistent for notebook and editor (:ghpull:`2745`). 
+- Bidi support (:ghpull:`2357`). 
+
+Special thanks to `samarsultan <https://github.com/samarsultan>`__ and the Arabic Competence and Globalization Center Team at IBM Egypt for adding RTL (right-to-left) support to the notebook!
+
+See the 5.2 milestone on GitHub for a complete list of
+`issues <https://github.com/jupyter/notebook/issues?utf8=%E2%9C%93&q=is%3Aissue%20milestone%3A5.2>`__
+and `pull requests <https://github.com/jupyter/notebook/pulls?utf8=%E2%9C%93&q=is%3Apr%20milestone%3A5.2>`__ involved in this release.
+
+.. _release-5.1.0:
+
+5.1.0
+-----
+
+- Preliminary i18n implementation (:ghpull:`2140`).
+- Expose URL with auth token in notebook UI (:ghpull:`2666`).
+- Fix search background style (:ghpull:`2387`).
+- List running notebooks without requiring ``--allow-root`` (:ghpull:`2421`).
+- Allow session of type other than notebook (:ghpull:`2559`).
+- Fix search background style (:ghpull:`2387`).
+- Fix some Markdown styling issues (:ghpull:`2571`), (:ghpull:`2691`) and (:ghpull:`2534`).
+- Remove keymaps that conflict with non-English keyboards (:ghpull:`2535`).
+- Add session-specific favicons (notebook, terminal, file) (:ghpull:`2452`).
+- Add /api/shutdown handler (:ghpull:`2507`).
+- Include metadata when copying a cell (:ghpull:`2349`).
+- Stop notebook server from command line (:ghpull:`2388`).
+- Improve "View" and "Edit" file handling in dashboard (:ghpull:`2449`) and (:ghpull:`2402`).
+- Provide a promise to replace use of the ``app_initialized.NotebookApp`` event (:ghpull:`2710`).
+- Fix disabled collapse/expand output button (:ghpull:`2681`).
+- Cull idle kernels using ``--MappingKernelManager.cull_idle_timeout`` (:ghpull:`2215`).
+- Allow read-only notebooks to be trusted (:ghpull:`2718`).
+
+See the 5.1 milestone on GitHub for a complete list of
+`issues <https://github.com/jupyter/notebook/issues?utf8=%E2%9C%93&q=is%3Aissue%20milestone%3A5.1>`__
+and `pull requests <https://github.com/jupyter/notebook/pulls?utf8=%E2%9C%93&q=is%3Apr%20milestone%3A5.1>`__ involved in this release.
 
 .. _release-5.0.0:
 
-Notebook version 5.0
---------------------
+5.0.0
+-----
 
 This is the first major release of the Jupyter Notebook since version 4.0 was
 created by the "Big Split" of IPython and Jupyter.
@@ -53,7 +260,7 @@ There is a new cell toolbar for adding *cell tags* (:ghpull:`2048`):
 
 Cell tags are a lightweight way to customise the behaviour of tools working with
 notebooks; we're working on building support for them into tools like `nbconvert
-<http://nbconvert.readthedocs.io/en/latest/>`__ and `nbval
+<https://nbconvert.readthedocs.io/en/latest/>`__ and `nbval
 <https://github.com/computationalmodelling/nbval>`__. To start using tags,
 select ``Tags`` in the ``View > Cell Toolbar`` menu in a notebook.
 
@@ -134,7 +341,7 @@ Other additions
   extensions(:ghpull:`2108`).
 
 - The notebook server now supports the `bundler API
-  <http://jupyter-notebook.readthedocs.io/en/latest/extending/bundler_extensions.html>`__
+  <https://jupyter-notebook.readthedocs.io/en/latest/extending/bundler_extensions.html>`__
   from the `jupyter_cms incubator project
   <https://github.com/jupyter-incubator/contentmanagement>`__ (:ghpull:`1579`).
 

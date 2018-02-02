@@ -7,6 +7,9 @@
 # Copyright (c) Jupyter Development Team.
 # Distributed under the terms of the Modified BSD License.
 
+from collections import defaultdict
+from datetime import datetime, timedelta
+from functools import partial
 import os
 
 from tornado import gen, web
@@ -15,13 +18,13 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 
 from jupyter_client.session import Session
 from jupyter_client.multikernelmanager import MultiKernelManager
-from traitlets import Dict, List, Unicode, TraitError, Integer, default, validate
+from traitlets import (Any, Bool, Dict, List, Unicode, TraitError, Integer,
+       Instance, default, validate
+)
 
-from notebook.utils import to_os_path
+from notebook.utils import to_os_path, exists
 from notebook._tz import utcnow, isoformat
 from ipython_genutils.py3compat import getcwd
-
-from datetime import datetime, timedelta
 
 
 class MappingKernelManager(MultiKernelManager):
@@ -55,21 +58,53 @@ class MappingKernelManager(MultiKernelManager):
         if not os.path.isabs(value):
             # If we receive a non-absolute path, make it absolute.
             value = os.path.abspath(value)
-        if not os.path.exists(value) or not os.path.isdir(value):
+        if not exists(value) or not os.path.isdir(value):
             raise TraitError("kernel root dir %r is not a directory" % value)
         return value
 
-    cull_idle_timeout_minimum = 300 # 5 minutes
     cull_idle_timeout = Integer(0, config=True,
-        help="""Timeout (in seconds) after which a kernel is considered idle and ready to be culled.  Values of 0 or
-        lower disable culling. The minimum timeout is 300 seconds (5 minutes). Positive values less than the minimum value
-        will be set to the minimum."""
+        help="""Timeout (in seconds) after which a kernel is considered idle and ready to be culled.
+        Values of 0 or lower disable culling. Very short timeouts may result in kernels being culled
+        for users with poor network connections."""
     )
 
     cull_interval_default = 300 # 5 minutes
     cull_interval = Integer(cull_interval_default, config=True,
         help="""The interval (in seconds) on which to check for idle kernels exceeding the cull timeout value."""
     )
+
+    cull_connected = Bool(False, config=True,
+        help="""Whether to consider culling kernels which have one or more connections.
+        Only effective if cull_idle_timeout > 0."""
+    )
+
+    cull_busy = Bool(False, config=True,
+        help="""Whether to consider culling kernels which are busy.
+        Only effective if cull_idle_timeout > 0."""
+    )
+
+    buffer_offline_messages = Bool(True, config=True,
+        help="""Whether messages from kernels whose frontends have disconnected should be buffered in-memory.
+
+        When True (default), messages are buffered and replayed on reconnect,
+        avoiding lost messages due to interrupted connectivity.
+
+        Disable if long-running kernels will produce too much output while
+        no frontends are connected.
+        """
+    )
+
+    _kernel_buffers = Any()
+    @default('_kernel_buffers')
+    def _default_kernel_buffers(self):
+        return defaultdict(lambda: {'buffer': [], 'session_key': '', 'channels': {}})
+
+    last_kernel_activity = Instance(datetime,
+        help="The last activity on any kernel, including shutting down a kernel")
+
+    def __init__(self, **kwargs):
+        super(MappingKernelManager, self).__init__(**kwargs)
+        self.last_kernel_activity = utcnow()
 
     #-------------------------------------------------------------------------
     # Methods for managing kernels and sessions
@@ -88,7 +123,7 @@ class MappingKernelManager(MultiKernelManager):
         while not os.path.isdir(os_path) and os_path != self.root_dir:
             os_path = os.path.dirname(os_path)
         return os_path
-    
+
     @gen.coroutine
     def start_kernel(self, kernel_id=None, path=None, **kwargs):
         """Start a kernel for a session and return its kernel_id.
@@ -131,12 +166,104 @@ class MappingKernelManager(MultiKernelManager):
 
         # py2-compat
         raise gen.Return(kernel_id)
-    
+
+    def start_buffering(self, kernel_id, session_key, channels):
+        """Start buffering messages for a kernel
+
+        Parameters
+        ----------
+        kernel_id : str
+            The id of the kernel to stop buffering.
+        session_key: str
+            The session_key, if any, that should get the buffer.
+            If the session_key matches the current buffered session_key,
+            the buffer will be returned.
+        channels: dict({'channel': ZMQStream})
+            The zmq channels whose messages should be buffered.
+        """
+
+        if not self.buffer_offline_messages:
+            for channel, stream in channels.items():
+                stream.close()
+            return
+
+        self.log.info("Starting buffering for %s", session_key)
+        self._check_kernel_id(kernel_id)
+        # clear previous buffering state
+        self.stop_buffering(kernel_id)
+        buffer_info = self._kernel_buffers[kernel_id]
+        # record the session key because only one session can buffer
+        buffer_info['session_key'] = session_key
+        # TODO: the buffer should likely be a memory bounded queue, we're starting with a list to keep it simple
+        buffer_info['buffer'] = []
+        buffer_info['channels'] = channels
+
+        # forward any future messages to the internal buffer
+        def buffer_msg(channel, msg_parts):
+            self.log.debug("Buffering msg on %s:%s", kernel_id, channel)
+            buffer_info['buffer'].append((channel, msg_parts))
+
+        for channel, stream in channels.items():
+            stream.on_recv(partial(buffer_msg, channel))
+
+    def get_buffer(self, kernel_id, session_key):
+        """Get the buffer for a given kernel
+
+        Parameters
+        ----------
+        kernel_id : str
+            The id of the kernel to stop buffering.
+        session_key: str, optional
+            The session_key, if any, that should get the buffer.
+            If the session_key matches the current buffered session_key,
+            the buffer will be returned.
+        """
+        self.log.debug("Getting buffer for %s", kernel_id)
+        if kernel_id not in self._kernel_buffers:
+            return
+
+        buffer_info = self._kernel_buffers[kernel_id]
+        if buffer_info['session_key'] == session_key:
+            # remove buffer
+            self._kernel_buffers.pop(kernel_id)
+            # only return buffer_info if it's a match
+            return buffer_info
+        else:
+            self.stop_buffering(kernel_id)
+
+    def stop_buffering(self, kernel_id):
+        """Stop buffering kernel messages
+
+        Parameters
+        ----------
+        kernel_id : str
+            The id of the kernel to stop buffering.
+        """
+        self.log.debug("Clearing buffer for %s", kernel_id)
+        self._check_kernel_id(kernel_id)
+
+        if kernel_id not in self._kernel_buffers:
+            return
+        buffer_info = self._kernel_buffers.pop(kernel_id)
+        # close buffering streams
+        for stream in buffer_info['channels'].values():
+            if not stream.closed():
+                stream.on_recv(None)
+                stream.close()
+
+        msg_buffer = buffer_info['buffer']
+        if msg_buffer:
+            self.log.info("Discarding %s buffered messages for %s",
+                len(msg_buffer), buffer_info['session_key'])
+
     def shutdown_kernel(self, kernel_id, now=False):
         """Shutdown a kernel by kernel_id"""
         self._check_kernel_id(kernel_id)
-        self._kernels[kernel_id]._activity_stream.close()
+        kernel = self._kernels[kernel_id]
+        kernel._activity_stream.close()
+        self.stop_buffering(kernel_id)
         self._kernel_connections.pop(kernel_id, None)
+        self.last_kernel_activity = utcnow()
         return super(MappingKernelManager, self).shutdown_kernel(kernel_id, now=now)
 
     def restart_kernel(self, kernel_id):
@@ -242,10 +369,11 @@ class MappingKernelManager(MultiKernelManager):
 
         def record_activity(msg_list):
             """Record an IOPub message arriving from a kernel"""
-            kernel.last_activity = utcnow()
+            self.last_kernel_activity = kernel.last_activity = utcnow()
 
             idents, fed_msg_list = session.feed_identities(msg_list)
             msg = session.deserialize(fed_msg_list)
+
             msg_type = msg['header']['msg_type']
             self.log.debug("activity on %s: %s", kernel_id, msg_type)
             if msg_type == 'status':
@@ -260,19 +388,19 @@ class MappingKernelManager(MultiKernelManager):
         """
         if not self._initialized_culler and self.cull_idle_timeout > 0:
             if self._culler_callback is None:
-                if self.cull_idle_timeout < self.cull_idle_timeout_minimum:
-                    self.log.warning("'cull_idle_timeout' (%s) is less than the minimum value (%s) and has been set to the minimum.",
-                        self.cull_idle_timeout, self.cull_idle_timeout_minimum)
-                    self.cull_idle_timeout = self.cull_idle_timeout_minimum
                 loop = IOLoop.current()
                 if self.cull_interval <= 0: #handle case where user set invalid value
                     self.log.warning("Invalid value for 'cull_interval' detected (%s) - using default value (%s).",
                         self.cull_interval, self.cull_interval_default)
                     self.cull_interval = self.cull_interval_default
                 self._culler_callback = PeriodicCallback(
-                    self.cull_kernels, 1000*self.cull_interval, loop)
+                    self.cull_kernels, 1000*self.cull_interval)
                 self.log.info("Culling kernels with idle durations > %s seconds at %s second intervals ...",
                     self.cull_idle_timeout, self.cull_interval)
+                if self.cull_busy:
+                    self.log.info("Culling kernels even if busy")
+                if self.cull_connected:
+                    self.log.info("Culling kernels even with connected clients")
                 self._culler_callback.start()
 
         self._initialized_culler = True
@@ -294,8 +422,15 @@ class MappingKernelManager(MultiKernelManager):
         if kernel.last_activity is not None:
             dt_now = utcnow()
             dt_idle = dt_now - kernel.last_activity
-            if dt_idle > timedelta(seconds=self.cull_idle_timeout): # exceeds timeout, can be culled
+            # Compute idle properties
+            is_idle_time = dt_idle > timedelta(seconds=self.cull_idle_timeout)
+            is_idle_execute = self.cull_busy or (kernel.execution_state != 'busy')
+            connections = self._kernel_connections.get(kernel_id, 0)
+            is_idle_connected = self.cull_connected or not connections
+            # Cull the kernel if all three criteria are met
+            if (is_idle_time and is_idle_execute and is_idle_connected):
                 idle_duration = int(dt_idle.total_seconds())
-                self.log.warning("Culling kernel '%s' (%s) due to %s seconds of inactivity.", kernel.kernel_name, kernel_id, idle_duration)
+                self.log.warning("Culling '%s' kernel '%s' (%s) with %d connections due to %s seconds of inactivity.",
+                                 kernel.execution_state, kernel.kernel_name, kernel_id, connections, idle_duration)
                 self.shutdown_kernel(kernel_id)
 

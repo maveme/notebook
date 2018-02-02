@@ -4,6 +4,7 @@
 define([
     'jquery',
     'base/js/utils',
+    'base/js/i18n',
     'notebook/js/cell',
     'base/js/security',
     'services/config',
@@ -16,6 +17,7 @@ define([
 ], function(
     $,
     utils,
+    i18n,
     cell,
     security,
     configmod,
@@ -55,8 +57,7 @@ define([
         this.notebook = options.notebook;
         this.events = options.events;
         this.config = options.config;
-        this.notebook = options.notebook;
-        
+
         // we cannot put this as a class key as it has handle to "this".
         Cell.apply(this, [{
                     config: options.config, 
@@ -391,7 +392,15 @@ define([
             var text_and_math = mathjaxutils.remove_math(text);
             text = text_and_math[0];
             math = text_and_math[1];
-            marked(text, function (err, html) {
+            // Prevent marked from returning inline styles for table cells
+            var renderer = new marked.Renderer();
+            renderer.tablecell = function (content, flags) {
+              var type = flags.header ? 'th' : 'td';
+              var start_tag = '<' + type + '>';
+              var end_tag = '</' + type + '>\n';
+              return start_tag + content + end_tag;
+            };
+            marked(text, { renderer: renderer }, function (err, html) {
                 html = mathjaxutils.replace_math(html, math);
                 html = security.sanitize_html(html);
                 html = $($.parseHTML(html));
@@ -481,7 +490,7 @@ define([
         // The dragleave event is fired when we hover a child element (which
         // is often immediatly after we got the dragenter), so we keep track
         // of the number of dragenter/dragleave we got, as discussed here :
-        // http://stackoverflow.com/q/7110353/116067
+        // https://stackoverflow.com/q/7110353/116067
         // This doesn't seem to be 100% reliable, so we clear the dropzone
         // class when the cell is rendered as well
         this.code_mirror.on("dragenter", function(cm, evt) {
@@ -546,9 +555,9 @@ define([
         highlight_modes : {
             'diff'         :{'reg':[/^diff/]}
         },
-        placeholder : "Write raw LaTeX or other formats here, for use with nbconvert. " +
+        placeholder : i18n.msg._("Write raw LaTeX or other formats here, for use with nbconvert. " +
             "It will not be rendered in the notebook. " +
-            "When passing through nbconvert, a Raw Cell's content is added to the output unmodified.",
+            "When passing through nbconvert, a Raw Cell's content is added to the output unmodified."),
     };
 
     RawCell.prototype = Object.create(TextCell.prototype);

@@ -20,7 +20,7 @@ var bind = function bind(obj) {
 Function.prototype.bind = Function.prototype.bind || bind ;
 
 
-require([
+requirejs([
     'jquery',
     'contents',
     'base/js/namespace',
@@ -29,9 +29,11 @@ require([
     'base/js/utils',
     'base/js/page',
     'base/js/events',
+    'base/js/promises',
     'auth/js/loginwidget',
     'notebook/js/maintoolbar',
     'notebook/js/pager',
+    'notebook/js/promises',
     'notebook/js/quickhelp',
     'notebook/js/menubar',
     'notebook/js/notificationarea',
@@ -43,6 +45,7 @@ require([
     'notebook/js/about',
     'notebook/js/searchandreplace',
     'notebook/js/clipboard',
+    'bidi/bidi',
     'components/mixpanel/build/mixpanel.amd'
 ], function(
     $,
@@ -53,9 +56,11 @@ require([
     utils,
     page,
     events,
+    promises,
     loginwidget,
     maintoolbar,
     pager,
+    nb_promises,
     quickhelp,
     menubar,
     notificationarea,
@@ -67,7 +72,11 @@ require([
     about,
     searchandreplace,
     clipboard,
+<<<<<<< HEAD
     mixpanel
+=======
+    bidi
+>>>>>>> 3de5e501f3f1eb16d89830b658d03b9c3e1a4c8b
     ) {
     "use strict";
 
@@ -83,6 +92,7 @@ require([
     
     try{
         requirejs(['custom/custom'], function() {});
+        bidi.loadLocale();
     } catch(err) {
         console.log("Error processing custom.js. Logging and continuing");
         console.warn(err);

@@ -12,12 +12,19 @@ except ImportError: #PY2
     from base64 import decodestring as decodebytes
 
 
-from tornado import web, escape
+from tornado import web
 
 from notebook.base.handlers import IPythonHandler
 
+
 class FilesHandler(IPythonHandler):
-    """serve files via ContentsManager"""
+    """serve files via ContentsManager
+
+    Normally used when ContentsManager is not a FileContentsManager.
+
+    FileContentsManager subclasses use AuthenticatedFilesHandler by default,
+    a subclass of StaticFileHandler.
+    """
 
     @web.authenticated
     def head(self, path):
@@ -26,10 +33,11 @@ class FilesHandler(IPythonHandler):
     @web.authenticated
     def get(self, path, include_body=True):
         cm = self.contents_manager
-        if cm.is_hidden(path):
+
+        if cm.is_hidden(path) and not cm.allow_hidden:
             self.log.info("Refusing to serve hidden file, via 404 Error")
             raise web.HTTPError(404)
-        
+
         path = path.strip('/')
         if '/' in path:
             _, name = path.rsplit('/', 1)
@@ -39,7 +47,7 @@ class FilesHandler(IPythonHandler):
         model = cm.get(path, type='file', content=include_body)
         
         if self.get_argument("download", False):
-            self.set_header('Content-Disposition','attachment; filename="%s"' % escape.url_escape(name))
+            self.set_attachment_header(name)
         
         # get mimetype from filename
         if name.endswith('.ipynb'):
@@ -66,6 +74,5 @@ class FilesHandler(IPythonHandler):
                 self.write(model['content'])
             self.flush()
 
-default_handlers = [
-    (r"/files/(.*)", FilesHandler),
-]
+
+default_handlers = []

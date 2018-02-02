@@ -1,7 +1,7 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-require([
+requirejs([
     'jquery',
     'contents',
     'base/js/namespace',
@@ -13,6 +13,7 @@ require([
     'edit/js/menubar',
     'edit/js/savewidget',
     'edit/js/notificationarea',
+    'bidi/bidi',
 ], function(
     $,
     contents_service,
@@ -24,12 +25,14 @@ require([
     editmod,
     menubar,
     savewidget,
-    notificationarea
+    notificationarea,
+    bidi
     ){
     "use strict";
 
     try {
         requirejs(['custom/custom'], function() {});
+        bidi.loadLocale();
     } catch(err) {
         console.log("Error loading custom.js from edition service. Continuing and logging");
         console.warn(err);
