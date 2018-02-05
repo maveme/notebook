@@ -76,8 +76,17 @@
 define([
   'base/js/namespace',
   'base/js/events',
-  'components/mixpanel/build/mixpanel.amd'
-], function(Jupyter, events, mixpanel) {
+  'components/mixpanel/build/mixpanel.amd',
+  'custom/salix'
+], function(Jupyter, events, mixpanel, salix) {
+  alert("Custom js loaded");
+
+  var tmp = new Salix();
+  tmp.start;
+
+  alert(tmp.subscriptions);
+  // tmp.start();
+  tmp.subscriptions();
 
   // Jupyter.toolbar.add_buttons_group([{
   //     'label': 'Search',
