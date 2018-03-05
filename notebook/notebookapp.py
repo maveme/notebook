@@ -711,13 +711,15 @@ class NotebookApp(JupyterApp):
         h.update(self.password.encode())
         return h.digest()
 
-
-    
     def _write_cookie_secret_file(self, secret):
         """write my secret to my secret_file"""
         self.log.info(_("Writing notebook server cookie secret to %s"), self.cookie_secret_file)
-        with io.open(self.cookie_secret_file, 'wb') as f:
-            f.write(secret)
+        try:
+            with io.open(self.cookie_secret_file, 'wb') as f:
+                f.write(secret)
+        except OSError as e:
+            self.log.error(_("Failed to write cookie secret to %s: %s"),
+                           self.cookie_secret_file, e)
         try:
             os.chmod(self.cookie_secret_file, 0o600)
         except OSError:
@@ -832,9 +834,11 @@ class NotebookApp(JupyterApp):
         `new` argument passed to the standard library method `webbrowser.open`.
         The behaviour is not guaranteed, but depends on browser support. Valid
         values are:
-            2 opens a new tab,
-            1 opens a new window,
-            0 opens in an existing window.
+
+         - 2 opens a new tab,
+         - 1 opens a new window,
+         - 0 opens in an existing window.
+
         See the `webbrowser.open` documentation for details.
         """))
 
@@ -1315,7 +1319,11 @@ class NotebookApp(JupyterApp):
     
     @property
     def display_url(self):
-        ip = self.ip if self.ip else _('[all ip addresses on your system]')
+        hostname = socket.gethostname()
+        if self.ip in ('localhost', '127.0.0.1', hostname):
+            ip = self.ip
+        else:
+            ip = hostname
         url = self._url(ip)
         if self.token:
             # Don't log full token if it came from config
@@ -1548,12 +1556,16 @@ class NotebookApp(JupyterApp):
 
     def write_server_info_file(self):
         """Write the result of server_info() to the JSON file info_file."""
-        with open(self.info_file, 'w') as f:
-            json.dump(self.server_info(), f, indent=2, sort_keys=True)
+        try:
+            with open(self.info_file, 'w') as f:
+                json.dump(self.server_info(), f, indent=2, sort_keys=True)
+        except OSError as e:
+            self.log.error(_("Failed to write server-info to %s: %s"),
+                           self.info_file, e)
 
     def remove_server_info_file(self):
         """Remove the nbserver-<pid>.json file created for this server.
-        
+
         Ignores the error raised when the file has already been removed.
         """
         try:
@@ -1623,7 +1635,7 @@ class NotebookApp(JupyterApp):
                 '\n',
                 'Copy/paste this URL into your browser when you connect for the first time,',
                 'to login with a token:',
-                '    %s' % url_concat(self.connection_url, {'token': self.token}),
+                '    %s' % url_concat(self.display_url, {'token': self.token}),
             ]))
 
         self.io_loop = ioloop.IOLoop.current()

@@ -189,32 +189,8 @@ define([
             that._nbconvert('html', false);
         });
 
-        this.element.find('#download_html').click(function () {
-            that._nbconvert('html', true);
-        });
-
-        this.element.find('#download_slides').click(function () {
-            that._nbconvert('slides', true);
-        });
-
-        this.element.find('#download_markdown').click(function () {
-            that._nbconvert('markdown', true);
-        });
-
-        this.element.find('#download_rst').click(function () {
-            that._nbconvert('rst', true);
-        });
-
-        this.element.find('#download_pdf').click(function () {
-            that._nbconvert('pdf', true);
-        });
-        
-        this.element.find('#download_latex').click(function () {
-            that._nbconvert('latex', true);
-        });
-
-        this.element.find('#download_script').click(function () {
-            that._nbconvert('script', true);
+        this.element.find('#download_menu li').click(function (ev) {
+            that._nbconvert(ev.target.parentElement.getAttribute('id').substring(9), true);
         });
 
         this.events.on('trust_changed.Notebook', function (event, trusted) {
@@ -231,18 +207,6 @@ define([
             }
         });
 
-        this.element.find('#kill_and_exit').click(function () {
-            var close_window = function () {
-                /**
-                 * allow closing of new tabs in Chromium, impossible in FF
-                 */
-                window.open('', '_self', '');
-                window.close();
-            };
-            // finish with close on success or failure
-            that.notebook.session.delete(close_window, close_window);
-        });
-
         // View
         this._add_celltoolbar_list();
 
@@ -252,7 +216,7 @@ define([
                 notebook: that.notebook,
                 keyboard_manager: that.notebook.keyboard_manager});
         });
-             
+
         var id_actions_dict = {
             '#trust_notebook' : 'trust-notebook',
             '#rename_notebook' : 'rename-notebook',
@@ -262,6 +226,7 @@ define([
             '#restart_kernel': 'confirm-restart-kernel',
             '#restart_clear_output': 'confirm-restart-kernel-and-clear-output',
             '#restart_run_all': 'confirm-restart-kernel-and-run-all-cells',
+            '#close_and_halt': 'close-and-halt',
             '#int_kernel': 'interrupt-kernel',
             '#cut_cell': 'cut-cell',
             '#copy_cell': 'copy-cell',
