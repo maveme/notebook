@@ -25,6 +25,8 @@
     "text-encoding": "~0.1",
     "underscore": "components/underscore#~1.8.3",
     "xterm.js": "sourcelair/xterm.js#~2.9.2",
-    "mixpanel": "https://github.com/mixpanel/mixpanel-js.git#2.12.0"
+    "mixpanel": "https://github.com/mixpanel/mixpanel-js.git#2.12.0",
+    "d3": "3.5.17",
+    "bootstrap-treeview": "1.2.0"
   }
 }

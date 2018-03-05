@@ -77,16 +77,20 @@ define([
   'base/js/namespace',
   'base/js/events',
   'components/mixpanel/build/mixpanel.amd',
-  'custom/salix'
-], function(Jupyter, events, mixpanel, salix) {
-  alert("Custom js loaded");
+  'custom/salix',
+  'custom/salix-charts',
+  'custom/salix-dagre',
+  'components/bootstrap-treeview/dist/bootstrap-treeview.min',
+  'custom/salix-treeview'
+], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree) {
+  // alert("Custom js loaded");
 
-  var tmp = new Salix();
-  tmp.start;
+  //alert($(document).ready(new Salix().start));
+  //var tmp = new Salix().tmp.start;
 
-  alert(tmp.subscriptions);
+  //alert(tmp.subscriptions);
   // tmp.start();
-  tmp.subscriptions();
+  // tmp.subscriptions();
 
   // Jupyter.toolbar.add_buttons_group([{
   //     'label': 'Search',
