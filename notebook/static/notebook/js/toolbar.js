@@ -1,7 +1,7 @@
 // Copyright (c) Jupyter Development Team.
 // Distributed under the terms of the Modified BSD License.
 
-define(['jquery','base/js/i18n'], function($, i18n) {
+define(['jquery','base/js/i18n', 'base/js/namespace'], function($, i18n, Jupyter) {
     "use strict";
 
     /**
@@ -116,6 +116,46 @@ define(['jquery','base/js/i18n'], function($, i18n) {
         $(this.selector).append(btn_group);
         return btn_group;
     };
+
+  ToolBar.prototype.add_selector_group = function (dropdown_options) {
+    var that = this;
+    var label = $('<div/>').addClass("btn-group");
+    label.append($('<p/>').text(dropdown_options.label));
+    $(this.selector).append(label);
+
+    var drop_down = $('<select/>').addClass("form-control select-xs").attr('id', 'codemirror-mode');
+    dropdown_options.options.forEach(function(el){
+        drop_down.append($("<option/>").attr("value", el).text(el));
+    });
+    function callFunction(name){
+      dropdown_options.callback(name.toLowerCase());
+    };
+
+    drop_down.change(function() {
+      $('#codemirror-mode option:selected').each(function() {
+        callFunction(this.value);
+      });
+    });
+    $(this.selector).append(drop_down);
+    return drop_down;
+  };
+
+  ToolBar.prototype.search_ras = function () {
+
+    console.log('entro');
+    console.log(IPython.notebook.session.kernel.send_shell_message("search_request", "ola", {},{}));
+    dialog.modal({
+      title: 'About Jupyter Notebook',
+      body: "<h1>hola</h1>",
+      buttons: { 'OK': {} }
+    });
+
+    // var div = $('<div/>').addClass("modal-dialog");
+    // div.append($('<div/> ').addClass('modal-content'));
+    // div.append($('<h4/>').addClass('modal-title').text("holaaaaa"));
+    // $(this.selector).append(div);
+    // return div;
+  };
 
     ToolBar.prototype.style = function () {
         this.element.addClass('toolbar');

@@ -27,6 +27,8 @@
     "xterm.js": "https://unpkg.com/xterm@~3.1.0/dist/xterm.js",
     "xterm.js-css": "https://unpkg.com/xterm@~3.1.0/dist/xterm.css",
     "xterm.js-fit": "https://unpkg.com/xterm@~3.1.0/dist/addons/fit/fit.js",
-    "mixpanel": "https://github.com/mixpanel/mixpanel-js.git#2.12.0"
+    "mixpanel": "https://github.com/mixpanel/mixpanel-js.git#2.12.0",
+    "d3": "3.5.17",
+    "bootstrap-treeview": "1.2.0"
   }
 }

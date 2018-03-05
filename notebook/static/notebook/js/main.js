@@ -46,7 +46,8 @@ requirejs([
     'notebook/js/searchandreplace',
     'notebook/js/clipboard',
     'bidi/bidi',
-    'components/mixpanel/build/mixpanel.amd'
+    'components/mixpanel/build/mixpanel.amd',
+    'components/d3/d3'
 ], function(
     $,
     contents_service,
@@ -72,26 +73,24 @@ requirejs([
     about,
     searchandreplace,
     clipboard,
-<<<<<<< HEAD
-    mixpanel
-=======
-    bidi
->>>>>>> 3de5e501f3f1eb16d89830b658d03b9c3e1a4c8b
+    bidi,
+    mixpanel,
+    d3
     ) {
     "use strict";
 
-    mixpanel.init("TOKEN", {
+    mixpanel.init("1366070925b7e5a28486ab8764aa49b7", {
       debug: true,
       loaded: function() {
-        mixpanel.track('Mixpanel was loaded from the notebook (file: main.js)');
+        mixpanel.track('Notebook opened');
       }
     });
 
     // Pull typeahead from the global jquery object
     var typeahead = $.typeahead;
-    
+
     try{
-        requirejs(['custom/custom'], function() {});
+        requirejs(['custom/custom', d3], function() {});
         bidi.loadLocale();
     } catch(err) {
         console.log("Error processing custom.js. Logging and continuing");
@@ -102,7 +101,6 @@ requirejs([
     window.CodeMirror = CodeMirror;
 
     // Setup all of the config related things
-    
 
     var common_options = {
         ws_url : utils.get_body_data("wsUrl"),
@@ -117,7 +115,7 @@ requirejs([
     common_config.load();
 
     // Instantiate the main objects
-    
+
     var page = new page.Page('div#header', 'div#site');
     var pager = new pager.Pager('div#pager', {
         events: events});
@@ -125,7 +123,7 @@ requirejs([
     var keyboard_manager = new keyboardmanager.KeyboardManager({
         pager: pager,
         events: events,
-        actions: acts, 
+        actions: acts,
         config: config_section,
     });
     var save_widget = new savewidget.SaveWidget('span#save_widget', {
@@ -225,7 +223,7 @@ requirejs([
     });
 
     clipboard.setup_clipboard_events();
-    
+
     // Now actually load nbextensionsload_extensions_from_config
     Promise.all([
         utils.load_extensions_from_config(config_section),

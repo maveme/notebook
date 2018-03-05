@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script src="//code.jquery.com/jquery-1.10.1.min.js"></script>
+    <script src="./tiff.min.js"></script>
+
+    <script type="text/javascript">
+      var loadImage = function () {
+        var xhr = new XMLHttpRequest();
+        xhr.open('GET', 'pastedGraphic.tiff');
+        xhr.responseType = 'arraybuffer';
+        xhr.onload = function (e) {
+          var buffer = xhr.response;
+          var tiff = new Tiff({buffer: buffer});
+          var canvas = tiff.toCanvas();
+          var width = tiff.width();
+          var height = tiff.height();
+          if (canvas) {
+            var $elem = $('<div><div></div></div>');
+            $elem.append(canvas);
+            $('body').append($elem);
+          }
+        };
+        xhr.send();
+      };
+      loadImage();
+    </script>
+</head>
+
+<body>
+
+</body>
+</html>
