@@ -27,12 +27,7 @@ function Salix(aRootId, host) {
   var queue = [];
 
   function start() {
-    console.log('start');
-    console.log(step);
-    // $.get('http://localhost:3456/root/init', {}, step).always(doSome);
-    // $.get('http://localhost:3457/'+rootId+'/init', {}, step).always(doSome);
     $.get(hostUrl + rootId + '/init', {}, step).always(doSome);
-    console.log(doSome);
   }
 
   function root() {
