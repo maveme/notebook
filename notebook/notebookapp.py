@@ -11,6 +11,8 @@ import binascii
 import datetime
 import errno
 import gettext
+import hashlib
+import hmac
 import importlib
 import io
 import json
@@ -27,7 +29,6 @@ import threading
 import time
 import warnings
 import webbrowser
-import hmac
 
 try: #PY3
     from base64 import encodebytes
@@ -232,7 +233,7 @@ class NotebookWebApplication(web.Application):
             },
             version_hash=version_hash,
             ignore_minified_js=jupyter_app.ignore_minified_js,
-            
+
             # rate limits
             iopub_msg_rate_limit=jupyter_app.iopub_msg_rate_limit,
             iopub_data_rate_limit=jupyter_app.iopub_data_rate_limit,
@@ -242,7 +243,7 @@ class NotebookWebApplication(web.Application):
             # tornado defaults are 100 MiB, we increase it to 0.5 GiB
             max_body_size = 512 * 1024 * 1024,
             max_buffer_size = 512 * 1024 * 1024,
-            
+
             # authentication
             cookie_secret=jupyter_app.cookie_secret,
             login_url=url_path_join(base_url,'/login'),
@@ -264,6 +265,9 @@ class NotebookWebApplication(web.Application):
 
             # Jupyter stuff
             started=now,
+            # place for extensions to register activity
+            # so that they can prevent idle-shutdown
+            last_activity_times={},
             jinja_template_vars=jupyter_app.jinja_template_vars,
             nbextensions_path=jupyter_app.nbextensions_path,
             websocket_url=jupyter_app.websocket_url,
@@ -360,6 +364,7 @@ class NotebookWebApplication(web.Application):
             sources.append(self.settings['terminal_last_activity'])
         except KeyError:
             pass
+        sources.extend(self.settings['last_activity_times'].values())
         return max(sources)
 
 
@@ -687,27 +692,26 @@ class NotebookApp(JupyterApp):
     @default('cookie_secret_file')
     def _default_cookie_secret_file(self):
         return os.path.join(self.runtime_dir, 'notebook_cookie_secret')
-    
+
     cookie_secret = Bytes(b'', config=True,
         help="""The random bytes used to secure cookies.
         By default this is a new random number every time you start the Notebook.
         Set it to a value in a config file to enable logins to persist across server sessions.
-        
+
         Note: Cookie secrets should be kept private, do not share config files with
         cookie_secret stored in plaintext (you can read the value from a file).
         """
     )
-    
+
     @default('cookie_secret')
     def _default_cookie_secret(self):
         if os.path.exists(self.cookie_secret_file):
             with io.open(self.cookie_secret_file, 'rb') as f:
                 key =  f.read()
         else:
-            key = encodebytes(os.urandom(1024))
+            key = encodebytes(os.urandom(32))
             self._write_cookie_secret_file(key)
-        h = hmac.HMAC(key)
-        h.digest_size = len(key)
+        h = hmac.new(key, digestmod=hashlib.sha256)
         h.update(self.password.encode())
         return h.digest()
 
@@ -1271,7 +1275,7 @@ class NotebookApp(JupyterApp):
             self.session_manager, self.kernel_spec_manager,
             self.config_manager, self.extra_services,
             self.log, self.base_url, self.default_url, self.tornado_settings,
-            self.jinja_environment_options
+            self.jinja_environment_options,
         )
         ssl_options = self.ssl_options
         if self.certfile:
