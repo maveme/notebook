@@ -12,7 +12,6 @@
 function Salix(aRootId, host) {
   var rootId = aRootId || 'root';
 
-  var hostUrl = host+"/" || '/';
   // 'native 'dom elements
   var builders = {};
 
@@ -26,13 +25,12 @@ function Salix(aRootId, host) {
   // queue of pending commands, events, subscription events
   var queue = [];
 
+  function makeURL(msg) {
+    return (host || '') + '/' + rootId + '/' + msg;
+  }
+
   function start() {
-    console.log('start');
-    console.log(step);
-    // $.get('http://localhost:3456/root/init', {}, step).always(doSome);
-    // $.get('http://localhost:3457/'+rootId+'/init', {}, step).always(doSome);
-    $.get(hostUrl + rootId + '/init', {}, step).always(doSome);
-    console.log(doSome);
+    $.get(makeURL('init'), {}, step).always(doSome);
   }
 
   function root() {
@@ -60,8 +58,7 @@ function Salix(aRootId, host) {
           continue;
         }
         renderRequested = true;
-        // $.get('http://localhost:3458/'+rootId+'/msg', event.message, step).fail(function () {
-        $.get(hostUrl + rootId + '/msg', event.message, step).fail(function () {
+        $.get(makeURL('msg'), event.message, step).fail(function () {
           renderRequested = false;
           window.requestAnimationFrame(doSome);
         });
