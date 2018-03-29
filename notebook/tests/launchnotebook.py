@@ -135,6 +135,9 @@ class NotebookTestBase(TestCase):
 
         started = Event()
         def start_thread():
+            if 'asyncio' in sys.modules:
+                import asyncio
+                asyncio.set_event_loop(asyncio.new_event_loop())
             app = cls.notebook = NotebookApp(
                 port=cls.port,
                 port_retries=0,
@@ -175,9 +178,9 @@ class NotebookTestBase(TestCase):
     def teardown_class(cls):
         cls.notebook.stop()
         cls.wait_until_dead()
-        cls.tmp_dir.cleanup()
         cls.env_patch.stop()
         cls.path_patch.stop()
+        cls.tmp_dir.cleanup()
         # cleanup global zmq Context, to ensure we aren't leaving dangling sockets
         def cleanup_zmq():
             zmq.Context.instance().term()
