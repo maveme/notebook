@@ -58,7 +58,7 @@ function Salix(aRootId, host) {
           continue;
         }
         renderRequested = true;
-        $.get(makeURL('/msg'), event.message, step).fail(function () {
+        $.get(makeURL('msg'), event.message, step).fail(function () {
           renderRequested = false;
           window.requestAnimationFrame(doSome);
         });
