@@ -19,3 +19,21 @@ This will always be an empty file in IPython
 [dir="rtl"] .fa-step-forward::before {
     content: "\f048";
 }
+
+/* SALIX
+*/
+div#nod-label {
+	color: #000;
+	font-weight: 300;
+	font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
+	font-size: 14px;
+}
+.node {
+	stroke: #333;
+	fill: #fff;
+	stroke-width: 1.5px;
+}
+.edgePath path {
+	stroke: #333;
+	stroke-width: 1.5px;
+}
