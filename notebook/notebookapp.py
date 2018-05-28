@@ -273,6 +273,7 @@ class NotebookWebApplication(web.Application):
             websocket_url=jupyter_app.websocket_url,
             mathjax_url=jupyter_app.mathjax_url,
             mathjax_config=jupyter_app.mathjax_config,
+            shutdown_button=jupyter_app.quit_button,
             config=jupyter_app.config,
             config_dir=jupyter_app.config_dir,
             allow_password_change=jupyter_app.allow_password_change,
@@ -1023,6 +1024,11 @@ class NotebookApp(JupyterApp):
     @observe('mathjax_config')
     def _update_mathjax_config(self, change):
         self.log.info(_("Using MathJax configuration file: %s"), change['new'])
+        
+    quit_button = Bool(True, config=True,
+        help="""If True, display a button in the dashboard to quit
+        (shutdown the notebook server)."""
+    )
 
     contents_manager_class = Type(
         default_value=LargeFileManager,
@@ -1187,6 +1193,16 @@ class NotebookApp(JupyterApp):
               "0 (the default) disables this automatic shutdown.")
     )
 
+    terminals_enabled = Bool(True, config=True,
+         help=_("""Set to False to disable terminals.
+
+         This does *not* make the notebook server more secure by itself.
+         Anything the user can in a terminal, they can also do in a notebook.
+
+         Terminals may also be automatically disabled if the terminado package
+         is not available.
+         """))
+
     def parse_command_line(self, argv=None):
         super(NotebookApp, self).parse_command_line(argv)
 
@@ -1323,11 +1339,10 @@ class NotebookApp(JupyterApp):
     
     @property
     def display_url(self):
-        hostname = socket.gethostname()
-        if self.ip in ('localhost', '127.0.0.1', hostname):
-            ip = self.ip
+        if self.ip in ('', '0.0.0.0'):
+            ip = socket.gethostname()
         else:
-            ip = hostname
+            ip = self.ip
         url = self._url(ip)
         if self.token:
             # Don't log full token if it came from config
@@ -1345,6 +1360,9 @@ class NotebookApp(JupyterApp):
         return "%s://%s:%i%s" % (proto, ip, self.port, self.base_url)
 
     def init_terminals(self):
+        if not self.terminals_enabled:
+            return
+
         try:
             from .terminal import initialize
             initialize(self.web_app, self.notebook_dir, self.connection_url, self.terminado_settings)
