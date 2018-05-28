@@ -81,7 +81,11 @@ define([
   'custom/salix-charts',
   'custom/salix-dagre',
   'components/bootstrap-treeview/dist/bootstrap-treeview.min',
-  'custom/salix-treeview'
+  'custom/salix-treeview',
+  'custom/framework/qlV',
+  'custom/framework/util',
+  'custom/framework/structural-widgets',
+  'custom/framework/value-widgets'
 ], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree) {
   // alert("Custom js loaded");
 
