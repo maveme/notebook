@@ -38,9 +38,11 @@ config.rst
 /.project
 /.pydevproject
 
+
 bower.json.orig
 package-lock.json
 notebook/static/notebook/js/toolbar_BACKUP_16316.js
 notebook/static/notebook/js/toolbar_BASE_16316.js
 notebook/static/notebook/js/toolbar_LOCAL_16316.js
 notebook/static/notebook/js/toolbar_REMOTE_16316.js
+package-lock.json
