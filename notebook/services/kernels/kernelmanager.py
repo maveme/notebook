@@ -26,6 +26,8 @@ from notebook.utils import to_os_path, exists
 from notebook._tz import utcnow, isoformat
 from ipython_genutils.py3compat import getcwd
 
+from notebook.prometheus.metrics import KERNEL_CURRENTLY_RUNNING_TOTAL
+
 
 class MappingKernelManager(MultiKernelManager):
     """A KernelManager that handles notebook mapping and HTTP error handling"""
@@ -168,6 +170,13 @@ class MappingKernelManager(MultiKernelManager):
                 lambda : self._handle_kernel_died(kernel_id),
                 'dead',
             )
+
+            # Increase the metric of number of kernels running
+            # for the relevant kernel type by 1
+            KERNEL_CURRENTLY_RUNNING_TOTAL.labels(
+                type=self._kernels[kernel_id].kernel_name
+            ).inc()
+
         else:
             self._check_kernel_id(kernel_id)
             self.log.info("Using existing kernel: %s" % kernel_id)
@@ -272,11 +281,19 @@ class MappingKernelManager(MultiKernelManager):
         """Shutdown a kernel by kernel_id"""
         self._check_kernel_id(kernel_id)
         kernel = self._kernels[kernel_id]
-        kernel._activity_stream.close()
-        kernel._activity_stream = None
+        if kernel._activity_stream:
+            kernel._activity_stream.close()
+            kernel._activity_stream = None
         self.stop_buffering(kernel_id)
         self._kernel_connections.pop(kernel_id, None)
         self.last_kernel_activity = utcnow()
+
+        # Decrease the metric of number of kernels
+        # running for the relevant kernel type by 1
+        KERNEL_CURRENTLY_RUNNING_TOTAL.labels(
+            type=self._kernels[kernel_id].kernel_name
+        ).dec()
+
         return super(MappingKernelManager, self).shutdown_kernel(kernel_id, now=now)
 
     def restart_kernel(self, kernel_id):
@@ -388,9 +405,11 @@ class MappingKernelManager(MultiKernelManager):
             msg = session.deserialize(fed_msg_list)
 
             msg_type = msg['header']['msg_type']
-            self.log.debug("activity on %s: %s", kernel_id, msg_type)
             if msg_type == 'status':
                 kernel.execution_state = msg['content']['execution_state']
+                self.log.debug("activity on %s: %s (%s)", kernel_id, msg_type, kernel.execution_state)
+            else:
+                self.log.debug("activity on %s: %s", kernel_id, msg_type)
 
         kernel._activity_stream.on_recv(record_activity)
 

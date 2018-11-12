@@ -12,8 +12,14 @@ from contextlib import contextmanager
 pjoin = os.path.join
 
 
-def wait_for_selector(browser, selector, timeout=10, visible=False, single=False):
-    wait = WebDriverWait(browser, timeout)
+def wait_for_selector(driver, selector, timeout=10, visible=False, single=False):
+    return _wait_for(driver, By.CSS_SELECTOR, selector, timeout, visible, single)
+
+def wait_for_tag(driver, tag, timeout=10, visible=False, single=False):
+    return _wait_for(driver, By.TAG_NAME, tag, timeout, visible, single)
+
+def _wait_for(driver, locator_type, locator, timeout=10, visible=False, single=False):
+    wait = WebDriverWait(driver, timeout)
     if single:
         if visible:
             conditional = EC.visibility_of_element_located
@@ -24,7 +30,7 @@ def wait_for_selector(browser, selector, timeout=10, visible=False, single=False
             conditional = EC.visibility_of_all_elements_located
         else:
             conditional = EC.presence_of_all_elements_located
-    return wait.until(conditional((By.CSS_SELECTOR, selector)))
+    return wait.until(conditional((locator_type, locator)))
 
 
 class CellTypeError(ValueError):
@@ -194,6 +200,10 @@ class Notebook:
         if cell_type != 'code':
             self.convert_cell_type(index=new_index, cell_type=cell_type)
 
+    def add_and_execute_cell(self, index=-1, cell_type="code", content=""):
+        self.add_cell(index=index, cell_type=cell_type, content=content)
+        self.execute_cell(index)
+
     def delete_cell(self, index):
         self.focus_cell(index)
         self.to_command_mode()
@@ -264,7 +274,7 @@ def new_window(browser, selector=None):
     yield
     new_window_handle = next(window for window in browser.window_handles 
                              if window not in initial_window_handles)
-    browser.switch_to_window(new_window_handle)
+    browser.switch_to.window(new_window_handle)
     if selector is not None:
         wait_for_selector(browser, selector)
 

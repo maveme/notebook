@@ -213,7 +213,7 @@ class NotebookWebApplication(web.Application):
         now = utcnow()
         
         root_dir = contents_manager.root_dir
-        home = os.path.expanduser('~')
+        home = py3compat.str_to_unicode(os.path.expanduser('~'), encoding=sys.getfilesystemencoding()) 
         if root_dir.startswith(home + os.path.sep):
             # collapse $HOME to ~
             root_dir = '~' + root_dir[len(home):]
@@ -239,11 +239,6 @@ class NotebookWebApplication(web.Application):
             iopub_msg_rate_limit=jupyter_app.iopub_msg_rate_limit,
             iopub_data_rate_limit=jupyter_app.iopub_data_rate_limit,
             rate_limit_window=jupyter_app.rate_limit_window,
-
-            # maximum request sizes - support saving larger notebooks
-            # tornado defaults are 100 MiB, we increase it to 0.5 GiB
-            max_body_size = 512 * 1024 * 1024,
-            max_buffer_size = 512 * 1024 * 1024,
 
             # authentication
             cookie_secret=jupyter_app.cookie_secret,
@@ -780,6 +775,24 @@ class NotebookApp(JupyterApp):
             self._token_generated = True
             return binascii.hexlify(os.urandom(24)).decode('ascii')
 
+    max_body_size = Integer(512 * 1024 * 1024, config=True,
+        help="""
+        Sets the maximum allowed size of the client request body, specified in 
+        the Content-Length request header field. If the size in a request 
+        exceeds the configured value, a malformed HTTP message is returned to
+        the client.
+
+        Note: max_body_size is applied even in streaming mode.
+        """
+    )
+
+    max_buffer_size = Integer(512 * 1024 * 1024, config=True,
+        help="""
+        Gets or sets the maximum amount of memory, in bytes, that is allocated 
+        for use by the buffer manager.
+        """
+    )
+
     @observe('token')
     def _token_changed(self, change):
         self._token_generated = False
@@ -852,6 +865,12 @@ class NotebookApp(JupyterApp):
     @default('allow_remote_access')
     def _default_allow_remote(self):
         """Disallow remote access if we're listening only on loopback addresses"""
+
+        # if blank, self.ip was configured to "*" meaning bind to all interfaces,
+        # see _valdate_ip
+        if self.ip == "":
+            return True
+
         try:
             addr = ipaddress.ip_address(self.ip)
         except ValueError:
@@ -944,6 +963,10 @@ class NotebookApp(JupyterApp):
     cookie_options = Dict(config=True,
         help=_("Extra keyword arguments to pass to `set_secure_cookie`."
              " See tornado's set_secure_cookie docs for details.")
+    )
+    get_secure_cookie_kwargs = Dict(config=True,
+        help=_("Extra keyword arguments to pass to `get_secure_cookie`."
+             " See tornado's get_secure_cookie docs for details.")
     )
     ssl_options = Dict(config=True,
             help=_("""Supply SSL options for the tornado HTTPServer.
@@ -1338,6 +1361,7 @@ class NotebookApp(JupyterApp):
             self.tornado_settings['allow_origin_pat'] = re.compile(self.allow_origin_pat)
         self.tornado_settings['allow_credentials'] = self.allow_credentials
         self.tornado_settings['cookie_options'] = self.cookie_options
+        self.tornado_settings['get_secure_cookie_kwargs'] = self.get_secure_cookie_kwargs
         self.tornado_settings['token'] = self.token
         if (self.open_browser or self.file_to_run) and not self.password:
             self.one_time_token = binascii.hexlify(os.urandom(24)).decode('ascii')
@@ -1380,7 +1404,9 @@ class NotebookApp(JupyterApp):
         
         self.login_handler_class.validate_security(self, ssl_options=ssl_options)
         self.http_server = httpserver.HTTPServer(self.web_app, ssl_options=ssl_options,
-                                                 xheaders=self.trust_xheaders)
+                                                 xheaders=self.trust_xheaders,
+                                                 max_body_size=self.max_body_size,
+                                                 max_buffer_size=self.max_buffer_size)
 
         success = None
         for port in random_ports(self.port, self.port_retries+1):
@@ -1412,14 +1438,16 @@ class NotebookApp(JupyterApp):
                 url += '/'
         else:
             if self.ip in ('', '0.0.0.0'):
-                ip = "(%s or 127.0.0.1)" % socket.gethostname()
+                ip = "%s" % socket.gethostname()
             else:
                 ip = self.ip
             url = self._url(ip)
         if self.token:
             # Don't log full token if it came from config
             token = self.token if self._token_generated else '...'
-            url = url_concat(url, {'token': token})
+            url = (url_concat(url, {'token': token})
+                  + '\n or '
+                  + url_concat(self._url('127.0.0.1'), {'token': token}))
         return url
 
     @property
