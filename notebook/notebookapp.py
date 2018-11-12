@@ -15,6 +15,7 @@ import hashlib
 import hmac
 import importlib
 import io
+import ipaddress
 import json
 import logging
 import mimetypes
@@ -212,7 +213,7 @@ class NotebookWebApplication(web.Application):
         now = utcnow()
         
         root_dir = contents_manager.root_dir
-        home = os.path.expanduser('~')
+        home = py3compat.str_to_unicode(os.path.expanduser('~'), encoding=sys.getfilesystemencoding()) 
         if root_dir.startswith(home + os.path.sep):
             # collapse $HOME to ~
             root_dir = '~' + root_dir[len(home):]
@@ -239,11 +240,6 @@ class NotebookWebApplication(web.Application):
             iopub_data_rate_limit=jupyter_app.iopub_data_rate_limit,
             rate_limit_window=jupyter_app.rate_limit_window,
 
-            # maximum request sizes - support saving larger notebooks
-            # tornado defaults are 100 MiB, we increase it to 0.5 GiB
-            max_body_size = 512 * 1024 * 1024,
-            max_buffer_size = 512 * 1024 * 1024,
-
             # authentication
             cookie_secret=jupyter_app.cookie_secret,
             login_url=url_path_join(base_url,'/login'),
@@ -252,6 +248,8 @@ class NotebookWebApplication(web.Application):
             password=jupyter_app.password,
             xsrf_cookies=True,
             disable_check_xsrf=jupyter_app.disable_check_xsrf,
+            allow_remote_access=jupyter_app.allow_remote_access,
+            local_hostnames=jupyter_app.local_hostnames,
 
             # managers
             kernel_manager=kernel_manager,
@@ -666,6 +664,19 @@ class NotebookApp(JupyterApp):
             value = u''
         return value
 
+    custom_display_url = Unicode(u'', config=True,
+        help=_("""Override URL shown to users.
+
+        Replace actual URL, including protocol, address, port and base URL,
+        with the given value when displaying URL to the users. Do not change
+        the actual connection URL. If authentication token is enabled, the
+        token is added to the custom URL automatically.
+
+        This option is intended to be used when the URL to display to the user
+        cannot be determined reliably by the Jupyter notebook server (proxified
+        or containerized setups for example).""")
+    )
+
     port = Integer(8888, config=True,
         help=_("The port the notebook server will listen on.")
     )
@@ -764,6 +775,24 @@ class NotebookApp(JupyterApp):
             self._token_generated = True
             return binascii.hexlify(os.urandom(24)).decode('ascii')
 
+    max_body_size = Integer(512 * 1024 * 1024, config=True,
+        help="""
+        Sets the maximum allowed size of the client request body, specified in 
+        the Content-Length request header field. If the size in a request 
+        exceeds the configured value, a malformed HTTP message is returned to
+        the client.
+
+        Note: max_body_size is applied even in streaming mode.
+        """
+    )
+
+    max_buffer_size = Integer(512 * 1024 * 1024, config=True,
+        help="""
+        Gets or sets the maximum amount of memory, in bytes, that is allocated 
+        for use by the buffer manager.
+        """
+    )
+
     @observe('token')
     def _token_changed(self, change):
         self._token_generated = False
@@ -816,6 +845,63 @@ class NotebookApp(JupyterApp):
         These services can disable all authentication and security checks,
         with the full knowledge of what that implies.
         """
+    )
+
+    allow_remote_access = Bool(config=True,
+       help="""Allow requests where the Host header doesn't point to a local server
+
+       By default, requests get a 403 forbidden response if the 'Host' header
+       shows that the browser thinks it's on a non-local domain.
+       Setting this option to True disables this check.
+
+       This protects against 'DNS rebinding' attacks, where a remote web server
+       serves you a page and then changes its DNS to send later requests to a
+       local IP, bypassing same-origin checks.
+
+       Local IP addresses (such as 127.0.0.1 and ::1) are allowed as local,
+       along with hostnames configured in local_hostnames.
+       """)
+
+    @default('allow_remote_access')
+    def _default_allow_remote(self):
+        """Disallow remote access if we're listening only on loopback addresses"""
+
+        # if blank, self.ip was configured to "*" meaning bind to all interfaces,
+        # see _valdate_ip
+        if self.ip == "":
+            return True
+
+        try:
+            addr = ipaddress.ip_address(self.ip)
+        except ValueError:
+            # Address is a hostname
+            for info in socket.getaddrinfo(self.ip, self.port, 0, socket.SOCK_STREAM):
+                addr = info[4][0]
+                if not py3compat.PY3:
+                    addr = addr.decode('ascii')
+
+                try:
+                    parsed = ipaddress.ip_address(addr.split('%')[0])
+                except ValueError:
+                    self.log.warning("Unrecognised IP address: %r", addr)
+                    continue
+
+                # Macs map localhost to 'fe80::1%lo0', a link local address
+                # scoped to the loopback interface. For now, we'll assume that
+                # any scoped link-local address is effectively local.
+                if not (parsed.is_loopback
+                        or (('%' in addr) and parsed.is_link_local)):
+                    return True
+            return False
+        else:
+            return not addr.is_loopback
+
+    local_hostnames = List(Unicode(), ['localhost'], config=True,
+       help="""Hostnames to allow as local when allow_remote_access is False.
+
+       Local IP addresses (such as 127.0.0.1 and ::1) are automatically accepted
+       as local as well.
+       """
     )
 
     open_browser = Bool(True, config=True,
@@ -877,6 +963,10 @@ class NotebookApp(JupyterApp):
     cookie_options = Dict(config=True,
         help=_("Extra keyword arguments to pass to `set_secure_cookie`."
              " See tornado's set_secure_cookie docs for details.")
+    )
+    get_secure_cookie_kwargs = Dict(config=True,
+        help=_("Extra keyword arguments to pass to `get_secure_cookie`."
+             " See tornado's get_secure_cookie docs for details.")
     )
     ssl_options = Dict(config=True,
             help=_("""Supply SSL options for the tornado HTTPServer.
@@ -1271,6 +1361,7 @@ class NotebookApp(JupyterApp):
             self.tornado_settings['allow_origin_pat'] = re.compile(self.allow_origin_pat)
         self.tornado_settings['allow_credentials'] = self.allow_credentials
         self.tornado_settings['cookie_options'] = self.cookie_options
+        self.tornado_settings['get_secure_cookie_kwargs'] = self.get_secure_cookie_kwargs
         self.tornado_settings['token'] = self.token
         if (self.open_browser or self.file_to_run) and not self.password:
             self.one_time_token = binascii.hexlify(os.urandom(24)).decode('ascii')
@@ -1313,7 +1404,9 @@ class NotebookApp(JupyterApp):
         
         self.login_handler_class.validate_security(self, ssl_options=ssl_options)
         self.http_server = httpserver.HTTPServer(self.web_app, ssl_options=ssl_options,
-                                                 xheaders=self.trust_xheaders)
+                                                 xheaders=self.trust_xheaders,
+                                                 max_body_size=self.max_body_size,
+                                                 max_buffer_size=self.max_buffer_size)
 
         success = None
         for port in random_ports(self.port, self.port_retries+1):
@@ -1339,15 +1432,22 @@ class NotebookApp(JupyterApp):
     
     @property
     def display_url(self):
-        if self.ip in ('', '0.0.0.0'):
-            ip = socket.gethostname()
+        if self.custom_display_url:
+            url = self.custom_display_url
+            if not url.endswith('/'):
+                url += '/'
         else:
-            ip = self.ip
-        url = self._url(ip)
+            if self.ip in ('', '0.0.0.0'):
+                ip = "%s" % socket.gethostname()
+            else:
+                ip = self.ip
+            url = self._url(ip)
         if self.token:
             # Don't log full token if it came from config
             token = self.token if self._token_generated else '...'
-            url = url_concat(url, {'token': token})
+            url = (url_concat(url, {'token': token})
+                  + '\n or '
+                  + url_concat(self._url('127.0.0.1'), {'token': token}))
         return url
 
     @property
@@ -1552,13 +1652,14 @@ class NotebookApp(JupyterApp):
         self.log.info(kernel_msg % n_kernels)
         self.kernel_manager.shutdown_all()
 
-    def notebook_info(self):
+    def notebook_info(self, kernel_count=True):
         "Return the current working directory and the server url information"
         info = self.contents_manager.info_string() + "\n"
-        n_kernels = len(self.kernel_manager.list_kernel_ids())
-        kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
-        info += kernel_msg % n_kernels
-        info += "\n"
+        if kernel_count:
+            n_kernels = len(self.kernel_manager.list_kernel_ids())
+            kernel_msg = trans.ngettext("%d active kernel", "%d active kernels", n_kernels)
+            info += kernel_msg % n_kernels
+            info += "\n"
         # Format the info so that the URL fits on a single line in 80 char display
         info += _("The Jupyter Notebook is running at:\n%s") % self.display_url
         return info
@@ -1615,7 +1716,7 @@ class NotebookApp(JupyterApp):
                 self.exit(1)
 
         info = self.log.info
-        for line in self.notebook_info().split("\n"):
+        for line in self.notebook_info(kernel_count=False).split("\n"):
             info(line)
         info(_("Use Control-C to stop this server and shut down all kernels (twice to skip confirmation)."))
         if 'dev' in notebook.__version__:
@@ -1657,7 +1758,7 @@ class NotebookApp(JupyterApp):
                 '\n',
                 'Copy/paste this URL into your browser when you connect for the first time,',
                 'to login with a token:',
-                '    %s' % url_concat(self.display_url, {'token': self.token}),
+                '    %s' % self.display_url,
             ]))
 
         self.io_loop = ioloop.IOLoop.current()

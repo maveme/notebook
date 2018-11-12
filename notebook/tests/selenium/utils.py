@@ -1,5 +1,5 @@
 import os
-
+import time
 from selenium.webdriver import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -12,8 +12,14 @@ from contextlib import contextmanager
 pjoin = os.path.join
 
 
-def wait_for_selector(browser, selector, timeout=10, visible=False, single=False):
-    wait = WebDriverWait(browser, timeout)
+def wait_for_selector(driver, selector, timeout=10, visible=False, single=False):
+    return _wait_for(driver, By.CSS_SELECTOR, selector, timeout, visible, single)
+
+def wait_for_tag(driver, tag, timeout=10, visible=False, single=False):
+    return _wait_for(driver, By.TAG_NAME, tag, timeout, visible, single)
+
+def _wait_for(driver, locator_type, locator, timeout=10, visible=False, single=False):
+    wait = WebDriverWait(driver, timeout)
     if single:
         if visible:
             conditional = EC.visibility_of_element_located
@@ -24,7 +30,7 @@ def wait_for_selector(browser, selector, timeout=10, visible=False, single=False
             conditional = EC.visibility_of_all_elements_located
         else:
             conditional = EC.presence_of_all_elements_located
-    return wait.until(conditional((By.CSS_SELECTOR, selector)))
+    return wait.until(conditional((locator_type, locator)))
 
 
 class CellTypeError(ValueError):
@@ -99,6 +105,16 @@ class Notebook:
         cell.click()
         self.to_command_mode()
         self.current_cell = cell
+
+    def find_and_replace(self, index=0, find_txt='', replace_txt=''):
+        self.focus_cell(index)
+        self.to_command_mode()
+        self.body.send_keys('f')
+        wait_for_selector(self.browser, "#find-and-replace", single=True)
+        self.browser.find_element_by_id("findreplace_allcells_btn").click()
+        self.browser.find_element_by_id("findreplace_find_inp").send_keys(find_txt)
+        self.browser.find_element_by_id("findreplace_replace_inp").send_keys(replace_txt)
+        self.browser.find_element_by_id("findreplace_replaceall_btn").click()
 
     def convert_cell_type(self, index=0, cell_type="code"):
         # TODO add check to see if it is already present
@@ -184,6 +200,15 @@ class Notebook:
         if cell_type != 'code':
             self.convert_cell_type(index=new_index, cell_type=cell_type)
 
+    def add_and_execute_cell(self, index=-1, cell_type="code", content=""):
+        self.add_cell(index=index, cell_type=cell_type, content=content)
+        self.execute_cell(index)
+
+    def delete_cell(self, index):
+        self.focus_cell(index)
+        self.to_command_mode()
+        self.current_cell.send_keys('dd')
+
     def add_markdown_cell(self, index=-1, content="", render=True):
         self.add_cell(index, cell_type="markdown")
         self.edit_cell(index=index, content=content, render=render)
@@ -203,6 +228,9 @@ class Notebook:
         for cell in self:
             self.execute_cell(cell)
 
+    def trigger_keydown(self, keys):
+        trigger_keystrokes(self.body, keys)
+
     @classmethod
     def new_notebook(cls, browser, kernel_name='kernel-python3'):
         with new_window(browser, selector=".cell"):
@@ -213,7 +241,8 @@ class Notebook:
 def select_kernel(browser, kernel_name='kernel-python3'):
     """Clicks the "new" button and selects a kernel from the options.
     """
-    new_button = wait_for_selector(browser, "#new-buttons", single=True)
+    wait = WebDriverWait(browser, 10)
+    new_button = wait.until(EC.element_to_be_clickable((By.ID, "new-dropdown-button")))
     new_button.click()
     kernel_selector = '#{} a'.format(kernel_name)
     kernel = wait_for_selector(browser, kernel_selector, single=True)
@@ -245,16 +274,34 @@ def new_window(browser, selector=None):
     yield
     new_window_handle = next(window for window in browser.window_handles 
                              if window not in initial_window_handles)
-    browser.switch_to_window(new_window_handle)
+    browser.switch_to.window(new_window_handle)
     if selector is not None:
         wait_for_selector(browser, selector)
 
 def shift(browser, k):
     """Send key combination Shift+(k)"""
-    ActionChains(browser)\
-        .key_down(Keys.SHIFT).send_keys(k).key_up(Keys.SHIFT).perform()
+    trigger_keystrokes(browser, "shift-%s"%k)
 
 def ctrl(browser, k):
     """Send key combination Ctrl+(k)"""
-    ActionChains(browser)\
-        .key_down(Keys.CONTROL).send_keys(k).key_up(Keys.CONTROL).perform()
+    trigger_keystrokes(browser, "control-%s"%k)
+
+def trigger_keystrokes(browser, *keys):
+    """ Send the keys in sequence to the browser.
+    Handles following key combinations
+    1. with modifiers eg. 'control-alt-a', 'shift-c'
+    2. just modifiers eg. 'alt', 'esc'
+    3. non-modifiers eg. 'abc'
+    Modifiers : http://seleniumhq.github.io/selenium/docs/api/py/webdriver/selenium.webdriver.common.keys.html
+    """
+    for each_key_combination in keys:
+        keys = each_key_combination.split('-')
+        if len(keys) > 1:  # key has modifiers eg. control, alt, shift
+            modifiers_keys = [getattr(Keys, x.upper()) for x in keys[:-1]]
+            ac = ActionChains(browser)
+            for i in modifiers_keys: ac = ac.key_down(i)
+            ac.send_keys(keys[-1])
+            for i in modifiers_keys[::-1]: ac = ac.key_up(i)
+            ac.perform()
+        else:              # single key stroke. Check if modifier eg. "up"
+            browser.send_keys(getattr(Keys, keys[0].upper(), keys[0]))

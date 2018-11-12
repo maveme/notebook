@@ -338,11 +338,11 @@ define([
                 reader.onerror = reader_onerror;
             }
         });
-        // Replace the file input form wth a clone of itself. This is required to
+        // Clear fileinput value. This is required to
         // reset the form. Otherwise, if you upload a file, delete it and try to
         // upload it again, the changed event won't fire.
         var form = $('input.fileinput');
-        form.replaceWith(form.clone(true));
+        form.val('');
         return false;
     };
 
@@ -382,7 +382,8 @@ define([
         var breadcrumb = $('.breadcrumb');
         breadcrumb.empty();
         var list_item = $('<li/>');
-        var root = $('<li/>').append('<a href="/tree"><i class="fa fa-folder"></i></a>').click(function(e) {
+        var root_url = utils.url_path_join(that.base_url, '/tree');
+        var root = $('<li/>').append('<a href="' + root_url + '"><i class="fa fa-folder"></i></a>').click(function(e) {
             // Allow the default browser action when the user holds a modifier (e.g., Ctrl-Click)
             if(e.altKey || e.metaKey || e.shiftKey) {
                 return true;

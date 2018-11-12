@@ -19,12 +19,14 @@ from tornado.ioloop import IOLoop, PeriodicCallback
 from jupyter_client.session import Session
 from jupyter_client.multikernelmanager import MultiKernelManager
 from traitlets import (Any, Bool, Dict, List, Unicode, TraitError, Integer,
-       Instance, default, validate
+       Float, Instance, default, validate
 )
 
 from notebook.utils import to_os_path, exists
 from notebook._tz import utcnow, isoformat
 from ipython_genutils.py3compat import getcwd
+
+from notebook.prometheus.metrics import KERNEL_CURRENTLY_RUNNING_TOTAL
 
 
 class MappingKernelManager(MultiKernelManager):
@@ -93,6 +95,18 @@ class MappingKernelManager(MultiKernelManager):
         no frontends are connected.
         """
     )
+    
+    kernel_info_timeout = Float(60, config=True,
+        help="""Timeout for giving up on a kernel (in seconds).
+
+        On starting and restarting kernels, we check whether the
+        kernel is running and responsive by sending kernel_info_requests.
+        This sets the timeout in seconds for how long the kernel can take
+        before being presumed dead. 
+        This affects the MappingKernelManager (which handles kernel restarts) 
+        and the ZMQChannelsHandler (which handles the startup).
+        """
+    )
 
     _kernel_buffers = Any()
     @default('_kernel_buffers')
@@ -156,6 +170,13 @@ class MappingKernelManager(MultiKernelManager):
                 lambda : self._handle_kernel_died(kernel_id),
                 'dead',
             )
+
+            # Increase the metric of number of kernels running
+            # for the relevant kernel type by 1
+            KERNEL_CURRENTLY_RUNNING_TOTAL.labels(
+                type=self._kernels[kernel_id].kernel_name
+            ).inc()
+
         else:
             self._check_kernel_id(kernel_id)
             self.log.info("Using existing kernel: %s" % kernel_id)
@@ -260,11 +281,19 @@ class MappingKernelManager(MultiKernelManager):
         """Shutdown a kernel by kernel_id"""
         self._check_kernel_id(kernel_id)
         kernel = self._kernels[kernel_id]
-        kernel._activity_stream.close()
-        kernel._activity_stream = None
+        if kernel._activity_stream:
+            kernel._activity_stream.close()
+            kernel._activity_stream = None
         self.stop_buffering(kernel_id)
         self._kernel_connections.pop(kernel_id, None)
         self.last_kernel_activity = utcnow()
+
+        # Decrease the metric of number of kernels
+        # running for the relevant kernel type by 1
+        KERNEL_CURRENTLY_RUNNING_TOTAL.labels(
+            type=self._kernels[kernel_id].kernel_name
+        ).dec()
+
         return super(MappingKernelManager, self).shutdown_kernel(kernel_id, now=now)
 
     def restart_kernel(self, kernel_id):
@@ -305,7 +334,7 @@ class MappingKernelManager(MultiKernelManager):
         kernel.session.send(channel, "kernel_info_request")
         channel.on_recv(on_reply)
         loop = IOLoop.current()
-        timeout = loop.add_timeout(loop.time() + 30, on_timeout)
+        timeout = loop.add_timeout(loop.time() + self.kernel_info_timeout, on_timeout)
         return future
 
     def notify_connect(self, kernel_id):
@@ -376,9 +405,11 @@ class MappingKernelManager(MultiKernelManager):
             msg = session.deserialize(fed_msg_list)
 
             msg_type = msg['header']['msg_type']
-            self.log.debug("activity on %s: %s", kernel_id, msg_type)
             if msg_type == 'status':
                 kernel.execution_state = msg['content']['execution_state']
+                self.log.debug("activity on %s: %s (%s)", kernel_id, msg_type, kernel.execution_state)
+            else:
+                self.log.debug("activity on %s: %s", kernel_id, msg_type)
 
         kernel._activity_stream.on_recv(record_activity)
 
@@ -434,4 +465,3 @@ class MappingKernelManager(MultiKernelManager):
                 self.log.warning("Culling '%s' kernel '%s' (%s) with %d connections due to %s seconds of inactivity.",
                                  kernel.execution_state, kernel.kernel_name, kernel_id, connections, idle_duration)
                 self.shutdown_kernel(kernel_id)
-

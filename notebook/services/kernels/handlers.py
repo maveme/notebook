@@ -104,7 +104,8 @@ class ZMQChannelsHandler(AuthenticatedZMQStreamHandler):
 
     @property
     def kernel_info_timeout(self):
-        return self.settings.get('kernel_info_timeout', 10)
+        km_default = self.kernel_manager.kernel_info_timeout
+        return self.settings.get('kernel_info_timeout', km_default)
 
     @property
     def iopub_msg_rate_limit(self):
@@ -186,7 +187,7 @@ class ZMQChannelsHandler(AuthenticatedZMQStreamHandler):
         protocol_version = info.get('protocol_version', client_protocol_version)
         if protocol_version != client_protocol_version:
             self.session.adapt_version = int(protocol_version.split('.')[0])
-            self.log.info("Adapting to protocol v%s for kernel %s", protocol_version, self.kernel_id)
+            self.log.info("Adapting from protocol version {protocol_version} (kernel {kernel_id}) to {client_protocol_version} (client).".format(protocol_version=protocol_version, kernel_id=self.kernel_id, client_protocol_version=client_protocol_version))
         if not self._kernel_info_future.done():
             self._kernel_info_future.set_result(info)
     
@@ -455,6 +456,12 @@ class ZMQChannelsHandler(AuthenticatedZMQStreamHandler):
         self._close_future.set_result(None)
 
     def _send_status_message(self, status):
+        iopub = self.channels.get('iopub', None)
+        if iopub and not iopub.closed():
+            # flush IOPub before sending a restarting/dead status message
+            # ensures proper ordering on the IOPub channel
+            # that all messages from the stopped kernel have been delivered
+            iopub.flush()
         msg = self.session.msg("status",
             {'execution_state': status}
         )

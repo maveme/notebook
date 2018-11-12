@@ -79,12 +79,17 @@ function registerDagre(salix) {
 		render(svgGroup, g);
 		
 		var initialScale = 1;
+
 		zoom
-		  .translate([(svg.attr("width") - g.graph().width * initialScale) / 2, 20])
+		  .translate([(svg.attr("width") - g.graph().width * initialScale) / 2, (svg.attr("height") - g.graph().height * initialScale) / 2])
 		  .scale(initialScale)
 		  .event(svg);
 		svg.attr('height', g.graph().height * initialScale + 40);
 		svg.attr('width', g.graph().width * initialScale + 40);
+		console.log("Height: " + g.graph().height);
+        console.log("HeightSVG: " + svg.attr("height"));
+        console.log("Width: " + g.graph().width);
+        console.log("WidthSVG: " + svg.attr("width"));
 		
 		function patch(edits, attach) {
 			edits = edits || [];
