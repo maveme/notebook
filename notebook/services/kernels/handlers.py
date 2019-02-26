@@ -45,7 +45,7 @@ class MainKernelHandler(APIHandler):
             model.setdefault('name', km.default_kernel_name)
 
         kernel_id = yield gen.maybe_future(km.start_kernel(kernel_name=model['name']))
-        model = km.kernel_model(kernel_id)
+        model = yield gen.maybe_future(km.kernel_model(kernel_id))
         location = url_path_join(self.base_url, 'api', 'kernels', url_escape(kernel_id))
         self.set_header('Location', location)
         self.set_status(201)
@@ -57,7 +57,6 @@ class KernelHandler(APIHandler):
     @web.authenticated
     def get(self, kernel_id):
         km = self.kernel_manager
-        km._check_kernel_id(kernel_id)
         model = km.kernel_model(kernel_id)
         self.finish(json.dumps(model, default=date_default))
 
@@ -87,7 +86,7 @@ class KernelActionHandler(APIHandler):
                 self.log.error("Exception restarting kernel", exc_info=True)
                 self.set_status(500)
             else:
-                model = km.kernel_model(kernel_id)
+                model = yield gen.maybe_future(km.kernel_model(kernel_id))
                 self.write(json.dumps(model, default=date_default))
         self.finish()
 
@@ -306,8 +305,13 @@ class ZMQChannelsHandler(AuthenticatedZMQStreamHandler):
         if channel not in self.channels:
             self.log.warning("No such channel: %r", channel)
             return
-        stream = self.channels[channel]
-        self.session.send(stream, msg)
+        am = self.kernel_manager.allowed_message_types
+        mt = msg['header']['msg_type']
+        if am and mt not in am:
+            self.log.warning('Received message of type "%s", which is not allowed. Ignoring.' % mt)
+        else:
+            stream = self.channels[channel]
+            self.session.send(stream, msg)
 
     def _on_zmq_reply(self, stream, msg_list):
         idents, fed_msg_list = self.session.feed_identities(msg_list)
