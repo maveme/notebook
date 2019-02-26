@@ -2743,6 +2743,8 @@ define([
                 $.proxy(that.save_notebook_success, that, start),
                 function (error) {
                     that.events.trigger('notebook_save_failed.Notebook', error);
+                    // This hasn't handled the error, so propagate it up
+                    return Promise.reject(error);
                 }
             );
         };
@@ -2846,6 +2848,7 @@ define([
             this.create_checkpoint();
             this._checkpoint_after_save = false;
         }
+        return data;
     };
 
     Notebook.prototype.save_notebook_as = function() {
@@ -3310,7 +3313,7 @@ define([
      */
     Notebook.prototype.save_checkpoint = function () {
         this._checkpoint_after_save = true;
-        this.save_notebook(true);
+        return this.save_notebook(true);
     };
     
     /**
