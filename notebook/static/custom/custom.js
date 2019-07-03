@@ -81,9 +81,12 @@ define([
   'custom/salix-charts',
   'custom/salix-dagre',
   'components/bootstrap-treeview/dist/bootstrap-treeview.min',
-  'custom/salix-treeview'
-], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree) {
-  // alert("Custom js loaded");
+  'custom/salix-treeview',
+  'custom/bacata/bacata'
+], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree, bacata) {
+
+
+    // alert("Custom js loaded");
 
   //alert($(document).ready(new Salix().start));
   //var tmp = new Salix().tmp.start;

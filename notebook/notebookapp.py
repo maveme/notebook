@@ -421,7 +421,7 @@ def shutdown_server(server_info, timeout=5, log=None):
 
     # Poll to see if it shut down.
     for _ in range(timeout*10):
-        if check_pid(pid):
+        if not check_pid(pid):
             if log: log.debug("Server PID %s is gone", pid)
             return True
         time.sleep(0.1)
@@ -434,7 +434,7 @@ def shutdown_server(server_info, timeout=5, log=None):
 
     # Poll to see if it shut down.
     for _ in range(timeout * 10):
-        if check_pid(pid):
+        if not check_pid(pid):
             if log: log.debug("Server PID %s is gone", pid)
             return True
         time.sleep(0.1)
@@ -1420,8 +1420,13 @@ class NotebookApp(JupyterApp):
         else:
             # SSL may be missing, so only import it if it's to be used
             import ssl
-            # Disable SSLv3 by default, since its use is discouraged.
-            ssl_options.setdefault('ssl_version', ssl.PROTOCOL_TLSv1)
+            # PROTOCOL_TLS selects the highest ssl/tls protocol version that both the client and
+            # server support. When PROTOCOL_TLS is not available use PROTOCOL_SSLv23.
+            # PROTOCOL_TLS is new in version 2.7.13, 3.5.3 and 3.6
+            ssl_options.setdefault(
+                'ssl_version',
+                getattr(ssl, 'PROTOCOL_TLS', ssl.PROTOCOL_SSLv23)
+            )
             if ssl_options.get('ca_certs', False):
                 ssl_options.setdefault('cert_reqs', ssl.CERT_REQUIRED)
         
@@ -1618,11 +1623,18 @@ class NotebookApp(JupyterApp):
                                   exc_info=True)
 
     def init_mime_overrides(self):
-        # On some Windows machines, an application has registered an incorrect
-        # mimetype for CSS in the registry. Tornado uses this when serving
-        # .css files, causing browsers to reject the stylesheet. We know the
-        # mimetype always needs to be text/css, so we override it here.
+        # On some Windows machines, an application has registered incorrect
+        # mimetypes in the registry.
+        # Tornado uses this when serving .css and .js files, causing browsers to
+        # reject these files. We know the mimetype always needs to be text/css for css
+        # and application/javascript for JS, so we override it here
+        # and explicitly tell the mimetypes to not trust the Windows registry
+        if os.name == 'nt':
+            # do not trust windows registry, which regularly has bad info
+            mimetypes.init(files=[])
+        # ensure css, js are correct, which are required for pages to function
         mimetypes.add_type('text/css', '.css')
+        mimetypes.add_type('application/javascript', '.js')
 
 
     def shutdown_no_activity(self):
