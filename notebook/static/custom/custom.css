@@ -3,37 +3,6 @@ Placeholder for custom user CSS
 
 mainly to be overridden in profile/static/custom/custom.css
 
-This will always be an empty file in IPython
+This will always be an empty file
 */
 
-/*for the error , connecting & renaming window*/
-
-[dir="rtl"] .modal-footer {
-	text-align : left !important;
-}
-
-[dir="rtl"] .close {
-	float : left;
-}
-
-[dir="rtl"] .fa-step-forward::before {
-    content: "\f048";
-}
-
-/* SALIX
-*/
-div#nod-label {
-	color: #000;
-	font-weight: 300;
-	font-family: "Helvetica Neue", Helvetica, Arial, sans-serf;
-	font-size: 14px;
-}
-.node {
-	stroke: #333;
-	fill: #fff;
-	stroke-width: 1.5px;
-}
-.edgePath path {
-	stroke: #333;
-	stroke-width: 1.5px;
-}
