@@ -565,15 +565,27 @@ define([
             .addClass("item_name")
             .appendTo(link);
 
-        $("<span/>")
-            .addClass("file_size")
-            .addClass("pull-right")
+        var div = $('<div/>')
+            .addClass('pull-right')
             .appendTo(item);
+
+        var buttons = $('<div/>')
+            .addClass("item_buttons pull-left")
+            .appendTo(div);
+
+        var div2 = $('<div/>')
+            .addClass('pull-right')
+            .appendTo(div);
 
         $("<span/>")
             .addClass("item_modified")
+            .addClass("pull-left")
+            .appendTo(div2);
+
+        $("<span/>")
+            .addClass("file_size")
             .addClass("pull-right")
-            .appendTo(item);
+            .appendTo(div2);
 
         if (selectable === false) {
             checkbox.css('visibility', 'hidden');
@@ -587,10 +599,6 @@ define([
                 that._selection_changed();
             });
         }
-
-        var buttons = $('<div/>')
-            .addClass("item_buttons  pull-right")
-            .appendTo(item);
 
         $('<div/>')
             .addClass('running-indicator')
@@ -1071,10 +1079,10 @@ define([
         }
 
         // Open a dialog to enter the new path, with current path as default.
-        var input = $('<input/>').attr('type','text').attr('size','25').addClass('form-control')
+        var input = $('<input/>').attr('type','text').attr('size','25').attr('aria-labelledby','move-message').addClass('form-control')
             .val(utils.url_path_join('/', that.notebook_path));
         var dialog_body = $('<div/>').append(
-            $("<p/>").addClass("rename-message")
+            $("<p/>").addClass("rename-message").attr('id', 'move-message')
                 .text(i18n.msg.sprintf(i18n.msg.ngettext("Enter a new destination directory path for this item:",
                 					"Enter a new destination directory path for these %d items:", num_items),num_items))
         ).append(

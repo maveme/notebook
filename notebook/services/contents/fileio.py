@@ -24,10 +24,7 @@ from ipython_genutils.py3compat import str_to_unicode
 from traitlets.config import Configurable
 from traitlets import Bool
 
-try: #PY3
-    from base64 import encodebytes, decodebytes
-except ImportError: #PY2
-    from base64 import encodestring as encodebytes, decodestring as decodebytes
+from base64 import encodebytes, decodebytes
 
 
 def replace_file(src, dst):
@@ -192,8 +189,8 @@ class FileManagerMixin(Configurable):
     """
 
     use_atomic_writing = Bool(True, config=True, help=
-    """By default notebooks are saved on disk on a temporary file and then if succefully written, it replaces the old ones.
-      This procedure, namely 'atomic_writing', causes some bugs on file system whitout operation order enforcement (like some networked fs).
+    """By default notebooks are saved on disk on a temporary file and then if successfully written, it replaces the old ones.
+      This procedure, namely 'atomic_writing', causes some bugs on file system without operation order enforcement (like some networked fs).
       If set to False, the new notebook is written directly on the old one which could fail (eg: full filesystem or quota )""")
 
     @contextmanager
