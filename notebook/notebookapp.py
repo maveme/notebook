@@ -32,11 +32,13 @@ import time
 import warnings
 import webbrowser
 
-try: #PY3
-    from base64 import encodebytes
-except ImportError: #PY2
-    from base64 import encodestring as encodebytes
+try:
+    import resource
+except ImportError:
+    # Windows
+    resource = None
 
+from base64 import encodebytes
 
 from jinja2 import Environment, FileSystemLoader
 
@@ -70,11 +72,6 @@ from notebook import (
     __version__,
 )
 
-# py23 compatibility
-try:
-    raw_input = raw_input
-except NameError:
-    raw_input = input
 
 from .base.handlers import Template404, RedirectWithParams
 from .log import log_request
@@ -648,6 +645,24 @@ class NotebookApp(JupyterApp):
         help=_("Whether to allow the user to run the notebook as root.")
     )
 
+    use_redirect_file = Bool(True, config=True,
+        help="""Disable launching browser by redirect file
+
+     For versions of notebook > 5.7.2, a security feature measure was added that 
+     prevented the authentication token used to launch the browser from being visible.
+     This feature makes it difficult for other users on a multi-user system from
+     running code in your Jupyter session as you.
+
+     However, some environments (like Windows Subsystem for Linux (WSL) and Chromebooks),
+     launching a browser using a redirect file can lead the browser failing to load. 
+     This is because of the difference in file structures/paths between the runtime and 
+     the browser. 
+     
+     Disabling this setting to False will disable this behavior, allowing the browser 
+     to launch by using a URL and visible token (as before).
+     """
+    )
+
     default_url = Unicode('/tree', config=True,
         help=_("The default URL to redirect to from `/`")
     )
@@ -801,6 +816,14 @@ class NotebookApp(JupyterApp):
         for use by the buffer manager.
         """
     )
+
+    min_open_files_limit = Integer(4096, config=True,
+        help="""
+        Gets or sets a lower bound on the open file handles process resource
+        limit. This may need to be increased if you run into an
+        OSError: [Errno 24] Too many open files.
+        This is not applicable when running on Windows.
+        """)
 
     @observe('token')
     def _token_changed(self, change):
@@ -1366,7 +1389,7 @@ class NotebookApp(JupyterApp):
 
     def init_logging(self):
         # This prevents double log messages because tornado use a root logger that
-        # self.log is a child of. The logging module dipatches log messages to a log
+        # self.log is a child of. The logging module dispatches log messages to a log
         # and all of its ancenstors until propagate is set to False.
         self.log.propagate = False
         
@@ -1379,6 +1402,23 @@ class NotebookApp(JupyterApp):
         logger.parent = self.log
         logger.setLevel(self.log.level)
     
+    def init_resources(self):
+        """initialize system resources"""
+        if resource is None:
+            self.log.debug('Ignoring min_open_files_limit because the limit cannot be adjusted (for example, on Windows)')
+            return
+
+        old_soft, old_hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        soft = self.min_open_files_limit
+        hard = old_hard
+        if old_soft < soft:
+            if hard < soft:
+                hard = soft
+            self.log.debug(
+                'Raising open file limit: soft {}->{}; hard {}->{}'.format(old_soft, soft, old_hard, hard)
+            )
+            resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
     def init_webapp(self):
         """initialize tornado webapp and httpserver"""
         self.tornado_settings['allow_origin'] = self.allow_origin
@@ -1673,6 +1713,7 @@ class NotebookApp(JupyterApp):
         self.init_logging()
         if self._dispatching:
             return
+        self.init_resources()
         self.init_configurables()
         self.init_server_extension_config()
         self.init_components()
@@ -1782,6 +1823,12 @@ class NotebookApp(JupyterApp):
         if not browser:
             return
 
+        if not self.use_redirect_file:
+            uri = self.default_url[len(self.base_url):]
+
+            if self.token:
+                uri = url_concat(uri, {'token': self.token})
+
         if self.file_to_run:
             if not os.path.exists(self.file_to_run):
                 self.log.critical(_("%s does not exist") % self.file_to_run)
@@ -1797,9 +1844,12 @@ class NotebookApp(JupyterApp):
         else:
             open_file = self.browser_open_file
 
-        b = lambda: browser.open(
-            urljoin('file:', pathname2url(open_file)),
-            new=self.webbrowser_open_new)
+        if self.use_redirect_file:
+            assembled_url = urljoin('file:', pathname2url(open_file))
+        else:
+            assembled_url = url_path_join(self.connection_url, uri)
+        
+        b = lambda: browser.open(assembled_url, new=self.webbrowser_open_new)                            
         threading.Thread(target=b).start()
 
     def start(self):

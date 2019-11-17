@@ -98,16 +98,16 @@ this command whenever there are changes to JavaScript or LESS sources::
 
     npm run build
 
-**IMPORTANT:** Don't forget to run ``npm run build`` after switching branches. 
-When switching between branches of different versions (e.g. ``4.x`` and 
-``master``), run ``pip install -e .``. If you have tried the above and still 
+**IMPORTANT:** Don't forget to run ``npm run build`` after switching branches.
+When switching between branches of different versions (e.g. ``4.x`` and
+``master``), run ``pip install -e .``. If you have tried the above and still
 find that the notebook is not reflecting the current source code, try cleaning
 the repo with ``git clean -xfd`` and reinstalling with ``pip install -e .``.
 
 Development Tip
 """""""""""""""
 
-When doing development, you can use this command to automatically rebuild 
+When doing development, you can use this command to automatically rebuild
 JavaScript and LESS sources as they are modified::
 
     npm run build:watch
@@ -116,7 +116,7 @@ Git Hooks
 """""""""
 
 If you want to automatically update dependencies and recompile JavaScript and
-CSS after checking out a new commit, you can install post-checkout and 
+CSS after checking out a new commit, you can install post-checkout and
 post-merge hooks which will do it for you::
 
     git-hooks/install-hooks.sh
@@ -132,7 +132,7 @@ Python Tests
 
 Install dependencies::
 
-    pip install -e .[test]
+    pip install -e '.[test]'
 
 To run the Python tests, use::
 
@@ -175,13 +175,13 @@ To install (and activate) a `conda environment`_ named ``notebook_docs``
 containing all the necessary packages (except pandoc), use::
 
     conda env create -f docs/environment.yml
-    source activate notebook_docs  # Linux and OS X
+    conda activate notebook_docs  # Linux and OS X
     activate notebook_docs         # Windows
 
 .. _conda environment:
     https://conda.io/docs/user-guide/tasks/manage-environments.html#creating-an-environment-from-an-environment-yml-file
 
-If you want to install the necessary packages with ``pip`` instead::
+If you want to install the necessary packages with ``pip``, use the following instead::
 
     pip install -r docs/doc-requirements.txt
 
