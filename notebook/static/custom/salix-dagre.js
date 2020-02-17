@@ -9,6 +9,8 @@
  *  - Tijs van der Storm - storm@cwi.nl - CWI
  */
 
+var dagreD3 = require('components/dagre-d3/dist/dagre-d3.min');
+
 function registerDagre(salix) {
 	
 	function dagreGraph(nodes, edges, props) {

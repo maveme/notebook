@@ -76,14 +76,15 @@
 define([
   'base/js/namespace',
   'base/js/events',
-  'components/mixpanel/build/mixpanel.amd',
+  'components/mixpanel/dist/mixpanel.amd',
   'custom/salix',
   'custom/salix-charts',
   'custom/salix-dagre',
   'components/bootstrap-treeview/dist/bootstrap-treeview.min',
   'custom/salix-treeview',
-  'custom/bacata/bacata'
-], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree, bacata) {
+  'custom/bacata/bacata',
+  'custom/charts'
+], function(Jupyter, events, mixpanel, salix, salixCharts, salixDagre, boots, salixTree, bacata, googleChart) {
 
 
     // alert("Custom js loaded");

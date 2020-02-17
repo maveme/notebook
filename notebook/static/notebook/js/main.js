@@ -46,8 +46,9 @@ requirejs([
     'notebook/js/searchandreplace',
     'notebook/js/clipboard',
     'bidi/bidi',
-    'components/mixpanel/build/mixpanel.amd',
-    'components/d3/d3'
+    'components/mixpanel/dist/mixpanel.amd',
+    'components/d3/d3',
+    'components/dagre-d3/dist/dagre-d3.min'
 ], function(
     $,
     contents_service,
@@ -75,11 +76,13 @@ requirejs([
     clipboard,
     bidi,
     mixpanel,
-    d3
+    d3,
+    dagreD3
     ) {
     "use strict";
 
     mixpanel.init("1366070925b7e5a28486ab8764aa49b7", {
+      api_host: "https://api.mixpanel.com",
       debug: true,
       loaded: function() {
         mixpanel.track('Notebook opened');

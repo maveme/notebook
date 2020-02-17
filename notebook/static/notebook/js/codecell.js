@@ -23,7 +23,7 @@ define([
     'codemirror/lib/codemirror',
     'codemirror/mode/python/python',
     'notebook/js/codemirror-ipython',
-    'components/mixpanel/build/mixpanel.amd'
+    'components/mixpanel/dist/mixpanel.amd'
 ], function(
     $,
     IPython,
