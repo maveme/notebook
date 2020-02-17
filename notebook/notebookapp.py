@@ -1286,14 +1286,6 @@ class NotebookApp(JupyterApp):
             raise TraitError(trans.gettext("No such notebook dir: '%r'") % value)
         return value
 
-    @observe('notebook_dir')
-    def _update_notebook_dir(self, change):
-        """Do a bit of validation of the notebook dir."""
-        # setting App.notebook_dir implies setting notebook and kernel dirs as well
-        new = change['new']
-        self.config.FileContentsManager.root_dir = new
-        self.config.MappingKernelManager.root_dir = new
-
     # TODO: Remove me in notebook 5.0
     server_extensions = List(Unicode(), config=True,
         help=(_("DEPRECATED use the nbserver_extensions dict instead"))
@@ -1498,10 +1490,13 @@ class NotebookApp(JupyterApp):
                 self.http_server.listen(port, self.ip)
             except socket.error as e:
                 if e.errno == errno.EADDRINUSE:
-                    self.log.info(_('The port %i is already in use, trying another port.') % port)
+                    if self.port_retries:
+                        self.log.info(_('The port %i is already in use, trying another port.') % port)
+                    else:
+                        self.log.info(_('The port %i is already in use.') % port)
                     continue
                 elif e.errno in (errno.EACCES, getattr(errno, 'WSAEACCES', errno.EACCES)):
-                    self.log.warning(_("Permission to listen on port %i denied") % port)
+                    self.log.warning(_("Permission to listen on port %i denied.") % port)
                     continue
                 else:
                     raise
@@ -1510,8 +1505,12 @@ class NotebookApp(JupyterApp):
                 success = True
                 break
         if not success:
-            self.log.critical(_('ERROR: the notebook server could not be started because '
+            if self.port_retries:
+                self.log.critical(_('ERROR: the notebook server could not be started because '
                               'no available port could be found.'))
+            else:
+                self.log.critical(_('ERROR: the notebook server could not be started because '
+                              'port %i is not available.') % port)
             self.exit(1)
     
     @property
