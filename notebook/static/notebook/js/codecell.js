@@ -78,6 +78,8 @@ define([
 
     var keycodes = keyboard.keycodes;
 
+    var code_cell_index = 0;
+
     var CodeCell = function (kernel, options) {
         /**
          * Constructor
@@ -107,6 +109,8 @@ define([
 
         // create all attributed in constructor function
         // even if null for V8 VM optimisation
+        code_cell_index += 1;
+        this.code_cell_id = code_cell_index; // Added for the execution tree.
         this.input_prompt_number = null;
         this.celltoolbar = null;
         this.output_area = null;
@@ -494,18 +498,18 @@ define([
     };
 
 
-    CodeCell.input_prompt_classical = function (prompt_value, lines_number) {
+    CodeCell.input_prompt_classical = function (cell_number, prompt_value, lines_number) {
         var ns;
         if (prompt_value === undefined || prompt_value === null) {
             ns = "&nbsp;";
         } else {
             ns = encodeURIComponent(prompt_value);
         }
-        return '<bdi>'+i18n.msg._('In')+'</bdi>&nbsp;[' + ns + ']:';
+        return '<bdi>'+ i18n.msg._('Cell #: ') + cell_number + '   ' + i18n.msg._('In')+'</bdi>&nbsp;[' + ns + ']:';
     };
 
-    CodeCell.input_prompt_continuation = function (prompt_value, lines_number) {
-        var html = [CodeCell.input_prompt_classical(prompt_value, lines_number)];
+    CodeCell.input_prompt_continuation = function (cell_number, prompt_value, lines_number) {
+        var html = [CodeCell.input_prompt_classical(cell_number, prompt_value, lines_number)];
         for(var i=1; i < lines_number; i++) {
             html.push(['...:']);
         }
@@ -521,7 +525,7 @@ define([
            nline = this.code_mirror.lineCount();
         }
         this.input_prompt_number = number;
-        var prompt_html = CodeCell.input_prompt_function(this.input_prompt_number, nline);
+        var prompt_html = CodeCell.input_prompt_function(this.code_cell_id, this.input_prompt_number, nline);
 
         // This HTML call is okay because the user contents are escaped.
         this.element.find('div.input_prompt').html(prompt_html);
