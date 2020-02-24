@@ -33,6 +33,7 @@ define([
     './scrollmanager',
     './commandpalette',
     './shortcuteditor',
+    './executiontree'
 ], function (
     $,
     IPython,
@@ -60,7 +61,8 @@ define([
     tags_celltoolbar,
     scrollmanager,
     commandpalette,
-    shortcuteditor
+    shortcuteditor,
+    execution_tree
 ) {
 
     var ShortcutEditor = shortcuteditor.ShortcutEditor;
@@ -3508,6 +3510,8 @@ define([
         this.events.trigger('checkpoint_deleted.Notebook');
         this.load_notebook(this.notebook_path);
     };
+
+    execution_tree.init();
 
     return {Notebook: Notebook};
 });

@@ -724,7 +724,7 @@ define([
         return this.send_shell_message("inspect_request", content, callbacks);
     };
 
-    Kernel.prototype.execute = function (code, callbacks, options) {
+    Kernel.prototype.execute = function (code, callbacks, options, code_cell_id, current_cell) {
         /**
          * Execute given code into kernel, and pass result to callback.
          *
@@ -780,7 +780,9 @@ define([
             silent : true,
             store_history : false,
             user_expressions : {},
-            allow_stdin : false
+            allow_stdin : false,
+            cell_id : code_cell_id,
+            current_cell : current_cell
         };
         callbacks = callbacks || {};
         if (callbacks.input !== undefined) {

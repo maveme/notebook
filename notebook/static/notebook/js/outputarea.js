@@ -9,8 +9,9 @@ define([
     'base/js/keyboard',
     'services/config',
     'notebook/js/mathjaxutils',
-    'components/marked/lib/marked'
-], function($, utils, i18n, security, keyboard, configmod, mathjaxutils, marked) {
+    'components/marked/lib/marked',
+    'notebook/js/executiontree',
+], function($, utils, i18n, security, keyboard, configmod, mathjaxutils, marked, execution_tree) {
     "use strict";
 
     /**
@@ -306,6 +307,8 @@ define([
         return bundle;
     };
     
+    // var current_node = 'Root';
+    
     OutputArea.prototype.append_output = function (json) {
         this.expand();
         
@@ -324,6 +327,19 @@ define([
             case 'execute_result':
                 json = this.validate_mimebundle(json);
                 this.append_execute_result(json);
+
+                // TODO: This must be changed to read the cell_id from the json.
+                let new_node_name = `${json.execution_count}`;
+
+                // We should get the code_cell_id from the server
+                execution_tree.createNode(`${json.execution_count}`, json.data['text/plain']);
+
+                // We need to get the current_node from the kernel 
+                execution_tree.createEdge(new_node_name);
+
+                execution_tree.toggle();// Show execution tree
+                // execution_tree.setCurrentNode(current_node);
+                
                 break;
             case 'stream':
                 // append_stream might have merged the output with earlier stream output

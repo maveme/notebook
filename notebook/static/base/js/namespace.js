@@ -73,6 +73,8 @@ define(function(){
     // tree
     jglobal('SessionList','tree/js/sessionlist');
 
+    jglobal('ExecutionTree','notebook/js/executiontree');
+
     Jupyter.version = "7.0.0.dev0";
     Jupyter._target = '_blank';
 
