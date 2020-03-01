@@ -328,14 +328,18 @@ define([
                 json = this.validate_mimebundle(json);
                 this.append_execute_result(json);
 
-                // TODO: This must be changed to read the cell_id from the json.
-                let new_node_name = `${json.execution_count}`;
+                var graph = JSON.parse(json.metadata.Graph);
 
-                // We should get the code_cell_id from the server
-                execution_tree.createNode(`${json.execution_count}`, json.data['text/plain']);
+                execution_tree.createGraph(graph.currentNode.result, graph.nodes, graph.edges);
 
-                // We need to get the current_node from the kernel 
-                execution_tree.createEdge(new_node_name);
+                // // TODO: This must be changed to read the cell_id from the json.
+                // let new_node_name = `cell-${json.execution_count}`;
+
+                // // We should get the code_cell_id from the server
+                // execution_tree.createNode(`cell-${json.execution_count}`, json.data['text/plain']);
+
+                // // We need to get the current_node from the kernel 
+                // execution_tree.createEdge(new_node_name);
 
                 execution_tree.toggle();// Show execution tree
                 // execution_tree.setCurrentNode(current_node);

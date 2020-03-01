@@ -61,6 +61,26 @@ define([
         setCurrentNode(newNode);
     }
 
+    var createGraph = function createGraph(cNode, nodes, edges) {
+        g = new dagreD3.graphlib.Graph().setGraph({});
+
+        // each element contains the input code and the result.
+        nodes.forEach(element => {
+            createNode(element.result, element.result);
+        });
+
+        edges.forEach(element => {            
+            g.setEdge(element.nodeU, element.nodeV, {
+                label: element.value,
+                style: "stroke: #000",
+            }); 
+        });
+
+        changeNodeColor(cNode, "#afa");
+
+        currentNode = g.node(cNode).label;
+    }
+
     function renderGraph() {
         var svg = d3.select("svg"), 
         inner = svg.select("g");
@@ -109,6 +129,7 @@ define([
         createNode: createNode,
         createEdge: createEdge,
         getCurrentNode: getCurrentNode,
-        setCurrentNode: setCurrentNode
+        setCurrentNode: setCurrentNode,
+        createGraph: createGraph
     }
 });

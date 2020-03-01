@@ -368,10 +368,10 @@ define([
         this.set_input_prompt('*');
         this.element.addClass("running");
         var callbacks = this.get_callbacks();
-        var tmp = executiontree.getCurrentNode() || -1;
+        // var tmp = executiontree.getCurrentNode() || -1;
         
         this.last_msg_id = this.kernel.execute(this.get_text(), callbacks, {silent: false, store_history: true,
-            stop_on_error : stop_on_error}, this.get_cell_code_id());
+            stop_on_error : stop_on_error}, this.get_cell_code_id(), executiontree.getCurrentNode());
         CodeCell.msg_cells[this.last_msg_id] = this;
         this.render();
         this.events.trigger('execute.CodeCell', {cell: this});

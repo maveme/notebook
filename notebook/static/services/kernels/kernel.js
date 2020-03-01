@@ -784,13 +784,17 @@ define([
             cell_id : code_cell_id,
             current_cell : current_cell
         };
+        var metadata = {
+            cell_id : `cell-${code_cell_id}`,
+            current_cell : current_cell
+        }
         callbacks = callbacks || {};
         if (callbacks.input !== undefined) {
             content.allow_stdin = true;
         }
         $.extend(true, content, options);
         this.events.trigger('execution_request.Kernel', {kernel: this, content: content});
-        return this.send_shell_message("execute_request", content, callbacks);
+        return this.send_shell_message("execute_request", content, callbacks, metadata);
     };
 
     /**
