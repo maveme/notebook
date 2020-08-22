@@ -371,7 +371,7 @@ define([
         // var tmp = executiontree.getCurrentNode() || -1;
         
         this.last_msg_id = this.kernel.execute(this.get_text(), callbacks, {silent: false, store_history: true,
-            stop_on_error : stop_on_error}, this.get_cell_code_id(), executiontree.getCurrentNode());
+            stop_on_error : stop_on_error}, this.get_cell_code_id(), executiontree.getCurrentNode().id);
         CodeCell.msg_cells[this.last_msg_id] = this;
         this.render();
         this.events.trigger('execute.CodeCell', {cell: this});
@@ -508,7 +508,8 @@ define([
         } else {
             ns = encodeURIComponent(prompt_value);
         }
-        return '<bdi>'+ i18n.msg._('Cell #: ') + cell_number + '   ' + i18n.msg._('In')+'</bdi>&nbsp;[' + ns + ']:';
+        return '<bdi>'+ i18n.msg._('Id') + '</bdi>&nbsp;[' + cell_number + ']:';
+        // return '<bdi>'+ i18n.msg._('Cell id: ') + cell_number + '   ' + i18n.msg._('In')+'</bdi>&nbsp;[' + ns + ']:';
     };
 
     CodeCell.input_prompt_continuation = function (cell_number, prompt_value, lines_number) {

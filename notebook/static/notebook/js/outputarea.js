@@ -330,7 +330,7 @@ define([
 
                 var graph = JSON.parse(json.metadata.Graph);
 
-                execution_tree.createGraph(graph.currentNode.result, graph.nodes, graph.edges);
+                execution_tree.createGraph(graph.currentNode, graph.nodes, graph.edges);
 
                 // // TODO: This must be changed to read the cell_id from the json.
                 // let new_node_name = `cell-${json.execution_count}`;

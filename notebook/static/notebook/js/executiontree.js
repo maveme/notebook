@@ -8,6 +8,8 @@ define([
     
     var g = new dagreD3.graphlib.Graph().setGraph({}); // This represents the execution graph.
 
+    // var currentNode = null;
+
     var currentNode = null;
 
     var toggle = function toggleExecutionPanel() {
@@ -42,7 +44,7 @@ define([
             label: "Root",
             style: "fill: #afa"
         });
-        setCurrentNode("Root");
+        setCurrentNode("Root", "Root");
     }
 
     var createNode = function createNode(name, values) {
@@ -54,11 +56,11 @@ define([
     }
 
     var createEdge = function createEdge(newNode) {
-        g.setEdge(currentNode, newNode, {
+        g.setEdge(currentNode.id, newNode, {
             label: newNode,
             style: "stroke: #000000",
         });
-        setCurrentNode(newNode);
+        setCurrentNode(newNode, g.node(newNode).label);
     }
 
     var createGraph = function createGraph(cNode, nodes, edges) {
@@ -66,7 +68,7 @@ define([
 
         // each element contains the input code and the result.
         nodes.forEach(element => {
-            createNode(element.result, element.result);
+            createNode(element.hash, element.hash);
         });
 
         edges.forEach(element => {            
@@ -75,10 +77,11 @@ define([
                 style: "stroke: #000",
             }); 
         });
-
+        
         changeNodeColor(cNode, "#afa");
 
-        currentNode = g.node(cNode).label;
+        currentNode = {id: cNode, value: g.node(cNode).label};
+        // currentNode = g.node(cNode).label;
     }
 
     function renderGraph() {
@@ -99,7 +102,7 @@ define([
         var selections = inner.selectAll("g.node");
         selections.on('click', function (node_id) { // Clicking the node triggers the execution of all the predecessors in the path.
             // Make a callback to the kernel changing the current node
-            setCurrentNode(node_id)
+            setCurrentNode(node_id, g.node(node_id).label)
             renderGraph();
         });
     }
@@ -108,18 +111,18 @@ define([
         return currentNode;
     }
 
-    var setCurrentNode = function setCurrentNode(node) {
+    var setCurrentNode = function setCurrentNode(idp, valuep) {
         if (currentNode != null) {
-            changeNodeColor(currentNode, "#5162c2");
+            changeNodeColor(currentNode.id, "#5162c2");
         }
-        currentNode = node;
+        currentNode = {id: idp, value: valuep}
         // Change node color
-        changeNodeColor(currentNode, "#afa");
+        changeNodeColor(currentNode.id, "#afa");
 
     }
 
-    function changeNodeColor(node_id, color) {
-        let node = g.node(node_id);
+    function changeNodeColor(nodeP, color) {
+        let node = g.node(nodeP); // FIX: redundant
         node.style = `fill\: ${color}`;
     }
 
