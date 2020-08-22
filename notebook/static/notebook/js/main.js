@@ -54,7 +54,8 @@ requirejs([
     'notebook/js/clipboard',
     'bidi/bidi',
     'components/mixpanel/build/mixpanel.amd',
-    'components/d3/d3'
+    'components/d3/d3',
+    'notebook/js/celltoolbarpresets/tags'
 ], function(
     $,
     contents_service,
